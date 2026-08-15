@@ -1,0 +1,13 @@
+{
+  "type": "image",
+  "prompt": "hero",
+  "provider": "Image AI",
+  "status": "done",
+  "result": {
+    "type": "image",
+    "prompt": "hero",
+    "status": "generated",
+    "asset": null,
+    "metadata": {}
+  }
+}

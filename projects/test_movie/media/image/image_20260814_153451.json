@@ -1,0 +1,14 @@
+{
+  "type": "image",
+  "prompt": "cyberpunk city",
+  "provider": "Image AI",
+  "status": "done",
+  "asset": "projects/test_movie/media/image/image_20260814_153451",
+  "result": {
+    "type": "image",
+    "prompt": "cyberpunk city",
+    "status": "generated",
+    "asset": null,
+    "metadata": {}
+  }
+}

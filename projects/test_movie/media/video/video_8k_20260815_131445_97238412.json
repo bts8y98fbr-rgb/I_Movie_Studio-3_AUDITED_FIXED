@@ -1,0 +1,79 @@
+{
+  "task_id": "97238412",
+  "type": "video",
+  "prompt": "8K HDR cinematic shot, space station, fly through, cinematic_close, slow_tracking, anamorphic lens, volumetric lighting, cinematic color grading",
+  "provider": "Video AI",
+  "quality": "8k",
+  "status": "done",
+  "metadata": {
+    "scene_id": 1,
+    "shot_id": 3,
+    "timeline": {
+      "start": 6.67,
+      "duration": 3.33
+    },
+    "duration": 3.33,
+    "camera": {
+      "type": "cinematic",
+      "shot_type": "cinematic_close",
+      "movement": "slow_tracking"
+    },
+    "quality": {
+      "name": "Master 8K",
+      "resolution": "7680x4320",
+      "fps": 60,
+      "hdr": true,
+      "color_depth": 10,
+      "description": "Ultra cinematic 8K HDR master"
+    },
+    "shot_model_selection": {
+      "time": "2026-08-14T20:41:35.168326",
+      "shot_profile": "detail",
+      "camera": {
+        "shot_type": "cinematic_close",
+        "movement": "slow_tracking"
+      },
+      "selected_model": {
+        "status": "selected",
+        "selected_model": {
+          "name": "cinematic_video_ultra",
+          "type": "video",
+          "quality": 10,
+          "motion": 10,
+          "realism": 10,
+          "min_resolution": "7680x4320",
+          "hdr": true
+        },
+        "time": "2026-08-14T20:41:35.168324"
+      }
+    }
+  },
+  "result": {
+    "asset_id": "f6b4e950",
+    "type": "video",
+    "provider": "Video AI",
+    "prompt": "8K HDR cinematic shot, space station, fly through, cinematic_close, slow_tracking, anamorphic lens, volumetric lighting, cinematic color grading",
+    "status": "generated",
+    "asset_path": "projects/test_movie/assets/video/scene_001/shot_003",
+    "asset_file": "projects/test_movie/assets/video/scene_001/shot_003/f6b4e950.json",
+    "created": "2026-08-15T13:14:45.863040",
+    "metadata": {
+      "scene_id": 1,
+      "shot_id": 3,
+      "duration": 3.33,
+      "fps": 60,
+      "resolution": "7680x4320",
+      "hdr": true,
+      "color_depth": 10,
+      "timeline": {
+        "start": 6.67,
+        "duration": 3.33
+      },
+      "camera": {
+        "type": "cinematic",
+        "shot_type": "cinematic_close",
+        "movement": "slow_tracking"
+      }
+    }
+  }
+}

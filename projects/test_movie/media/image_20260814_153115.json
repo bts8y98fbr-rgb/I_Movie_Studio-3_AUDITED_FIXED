@@ -1,0 +1,13 @@
+{
+  "type": "image",
+  "prompt": "cinematic space station",
+  "provider": "Image AI",
+  "status": "done",
+  "result": {
+    "type": "image",
+    "prompt": "cinematic space station",
+    "status": "generated",
+    "asset": null,
+    "metadata": {}
+  }
+}

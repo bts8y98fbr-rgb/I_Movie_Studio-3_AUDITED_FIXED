@@ -1,0 +1,25 @@
+{
+  "scene_id": 1,
+  "shot_id": 3,
+  "timeline": {
+    "start": 6.67,
+    "duration": 3.33
+  },
+  "camera": {
+    "type": "cinematic",
+    "shot_type": "cinematic_close",
+    "movement": "slow_tracking"
+  },
+  "quality": {
+    "name": "Master 8K",
+    "resolution": "7680x4320",
+    "fps": 60,
+    "hdr": true,
+    "color_depth": 10,
+    "description": "Ultra cinematic 8K HDR master"
+  },
+  "source_asset_id": "5c2192b8",
+  "source_asset_file": "projects/test_movie/assets/video/scene_001/shot_003/5c2192b8.json",
+  "resolved_asset_file": "projects/test_movie/assets/video/scene_001/shot_003/5c2192b8.json",
+  "status": "prepared"
+}

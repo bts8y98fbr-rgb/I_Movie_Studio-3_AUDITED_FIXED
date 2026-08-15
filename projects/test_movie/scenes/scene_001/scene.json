@@ -1,0 +1,30 @@
+{
+  "scene_id": 1,
+  "duration": 5.0,
+  "created": "2026-08-14T16:39:30.500183",
+  "media": {
+    "image": {
+      "provider": "Image AI",
+      "result": {
+        "type": "image",
+        "prompt": "space station",
+        "status": "generated",
+        "asset": null,
+        "metadata": {}
+      }
+    },
+    "video": {
+      "provider": "Video AI",
+      "result": {
+        "type": "video",
+        "prompt": "fly through",
+        "status": "generated",
+        "asset": null,
+        "metadata": {
+          "duration": null,
+          "fps": null
+        }
+      }
+    }
+  }
+}

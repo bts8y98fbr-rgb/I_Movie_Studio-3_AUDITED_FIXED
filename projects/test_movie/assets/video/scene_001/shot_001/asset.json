@@ -1,0 +1,29 @@
+{
+  "asset_id": "655d7596",
+  "type": "video",
+  "prompt": "8K HDR cinematic shot, space station, fly through, wide_establishing, slow_orbit, anamorphic lens, volumetric lighting, cinematic color grading",
+  "quality": "8k",
+  "status": "generated",
+  "created": "2026-08-14T23:07:52.275042",
+  "metadata": {
+    "scene_id": 1,
+    "shot_id": 1,
+    "timeline": {
+      "start": 0.0,
+      "duration": 3.33
+    },
+    "camera": {
+      "type": "cinematic",
+      "shot_type": "wide_establishing",
+      "movement": "slow_orbit"
+    },
+    "quality": {
+      "name": "Master 8K",
+      "resolution": "7680x4320",
+      "fps": 60,
+      "hdr": true,
+      "color_depth": 10,
+      "description": "Ultra cinematic 8K HDR master"
+    }
+  }
+}

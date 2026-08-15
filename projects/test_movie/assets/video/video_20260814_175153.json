@@ -1,0 +1,21 @@
+{
+  "type": "video",
+  "prompt": "8K HDR cinematic shot, space station, fly through, medium_action, camera_move, anamorphic lens, volumetric lighting",
+  "quality": "8k",
+  "status": "generated",
+  "created": "2026-08-14T17:51:53.560061",
+  "asset_path": "projects/test_movie/assets/video/video_20260814_175153.json",
+  "metadata": {
+    "scene_id": 1,
+    "shot_id": 2,
+    "timeline": {
+      "start": 3,
+      "duration": 7.0
+    },
+    "camera": {
+      "type": "cinematic",
+      "shot_type": "medium_action",
+      "movement": "camera_move"
+    }
+  }
+}

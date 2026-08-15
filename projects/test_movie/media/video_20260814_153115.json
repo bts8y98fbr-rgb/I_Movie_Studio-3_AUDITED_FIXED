@@ -1,0 +1,16 @@
+{
+  "type": "video",
+  "prompt": "camera fly through",
+  "provider": "Video AI",
+  "status": "done",
+  "result": {
+    "type": "video",
+    "prompt": "camera fly through",
+    "status": "generated",
+    "asset": null,
+    "metadata": {
+      "duration": null,
+      "fps": null
+    }
+  }
+}

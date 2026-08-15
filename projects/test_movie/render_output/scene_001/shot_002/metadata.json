@@ -1,0 +1,25 @@
+{
+  "scene_id": 1,
+  "shot_id": 2,
+  "timeline": {
+    "start": 3.33,
+    "duration": 3.33
+  },
+  "camera": {
+    "type": "cinematic",
+    "shot_type": "hero_reveal",
+    "movement": "camera_push"
+  },
+  "quality": {
+    "name": "Master 8K",
+    "resolution": "7680x4320",
+    "fps": 60,
+    "hdr": true,
+    "color_depth": 10,
+    "description": "Ultra cinematic 8K HDR master"
+  },
+  "source_asset_id": "dbb0faac",
+  "source_asset_file": "projects/test_movie/assets/video/scene_001/shot_002/dbb0faac.json",
+  "resolved_asset_file": "projects/test_movie/assets/video/scene_001/shot_002/dbb0faac.json",
+  "status": "prepared"
+}

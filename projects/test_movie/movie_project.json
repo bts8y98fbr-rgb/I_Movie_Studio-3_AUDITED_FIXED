@@ -1,0 +1,49 @@
+{
+  "quality": {
+    "quality": "Master 8K",
+    "resolution": "7680x4320",
+    "fps": 60,
+    "hdr": true,
+    "color_depth": 10
+  },
+  "scenes": [
+    {
+      "scene_id": 1,
+      "duration": 5.0,
+      "created": "2026-08-14T16:39:30.500128"
+    }
+  ],
+  "timeline": [
+    {
+      "scene_id": 1,
+      "start": 0,
+      "duration": 5.0,
+      "media": {
+        "image": {
+          "provider": "Image AI",
+          "result": {
+            "type": "image",
+            "prompt": "space station",
+            "status": "generated",
+            "asset": null,
+            "metadata": {}
+          }
+        },
+        "video": {
+          "provider": "Video AI",
+          "result": {
+            "type": "video",
+            "prompt": "fly through",
+            "status": "generated",
+            "asset": null,
+            "metadata": {
+              "duration": null,
+              "fps": null
+            }
+          }
+        }
+      }
+    }
+  ],
+  "total_duration": 5.0
+}

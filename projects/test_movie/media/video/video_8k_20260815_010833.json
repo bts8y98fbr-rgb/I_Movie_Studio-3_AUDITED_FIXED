@@ -1,0 +1,17 @@
+{
+  "type": "video",
+  "prompt": "8K HDR cinematic shot, space station, fly through, cinematic_close, slow_tracking, anamorphic lens, volumetric lighting, cinematic color grading",
+  "provider": "Video AI",
+  "quality": "8k",
+  "status": "done",
+  "result": {
+    "type": "video",
+    "prompt": "8K HDR cinematic shot, space station, fly through, cinematic_close, slow_tracking, anamorphic lens, volumetric lighting, cinematic color grading",
+    "status": "generated",
+    "asset": null,
+    "metadata": {
+      "duration": null,
+      "fps": null
+    }
+  }
+}

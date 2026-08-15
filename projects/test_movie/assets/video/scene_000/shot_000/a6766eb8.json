@@ -1,0 +1,19 @@
+{
+  "asset_id": "a6766eb8",
+  "type": "video",
+  "provider": "Video AI",
+  "prompt": "8K HDR cinematic shot, space station, fly through, hero_reveal, camera_push, anamorphic lens, volumetric lighting, cinematic color grading",
+  "status": "generated",
+  "asset_path": "projects/test_movie/assets/video/scene_000/shot_000",
+  "asset_file": "projects/test_movie/assets/video/scene_000/shot_000/a6766eb8.json",
+  "created": "2026-08-15T01:27:06.718253",
+  "metadata": {
+    "scene_id": 0,
+    "shot_id": 0,
+    "duration": null,
+    "fps": 60,
+    "resolution": "7680x4320",
+    "hdr": true,
+    "color_depth": 10
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "asset_id": "3845037e",
+  "type": "image",
+  "prompt": "test 8k image",
+  "quality": "8k",
+  "status": "generated",
+  "created": "2026-08-14T17:57:54.062297",
+  "metadata": {
+    "scene_id": 1,
+    "shot_id": 1
+  }
+}

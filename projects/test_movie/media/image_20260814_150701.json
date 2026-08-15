@@ -1,0 +1,13 @@
+{
+  "type": "image",
+  "prompt": "cyberpunk city",
+  "provider": "Image AI",
+  "status": "done",
+  "result": {
+    "type": "image",
+    "prompt": "cyberpunk city",
+    "status": "generated",
+    "asset": null,
+    "metadata": {}
+  }
+}

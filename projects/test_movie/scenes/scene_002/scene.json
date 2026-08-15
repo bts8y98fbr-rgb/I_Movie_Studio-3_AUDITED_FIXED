@@ -1,0 +1,30 @@
+{
+  "scene_id": 2,
+  "duration": 10.0,
+  "created": "2026-08-14T16:32:14.561360",
+  "media": {
+    "image": {
+      "provider": "Image AI",
+      "result": {
+        "type": "image",
+        "prompt": "hero",
+        "status": "generated",
+        "asset": null,
+        "metadata": {}
+      }
+    },
+    "video": {
+      "provider": "Video AI",
+      "result": {
+        "type": "video",
+        "prompt": "battle",
+        "status": "generated",
+        "asset": null,
+        "metadata": {
+          "duration": null,
+          "fps": null
+        }
+      }
+    }
+  }
+}

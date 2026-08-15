@@ -1,0 +1,14 @@
+{
+  "asset_id": "ddb09f22",
+  "type": "video",
+  "provider": "mock",
+  "prompt": "cinematic space station fly through",
+  "quality": "8k",
+  "status": "generated",
+  "created": "2026-08-14T19:22:05.774310",
+  "metadata": {
+    "scene": 1,
+    "shot": 1
+  },
+  "file": null
+}

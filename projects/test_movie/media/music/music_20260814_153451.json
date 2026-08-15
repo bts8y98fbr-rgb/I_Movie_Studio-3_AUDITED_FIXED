@@ -1,0 +1,17 @@
+{
+  "type": "music",
+  "prompt": "dark ambient",
+  "provider": "Music AI",
+  "status": "done",
+  "asset": "projects/test_movie/media/music/music_20260814_153451",
+  "result": {
+    "type": "music",
+    "prompt": "dark ambient",
+    "status": "generated",
+    "asset": null,
+    "metadata": {
+      "duration": null,
+      "tempo": null
+    }
+  }
+}

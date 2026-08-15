@@ -1,0 +1,17 @@
+{
+  "type": "video",
+  "prompt": "tracking shot",
+  "provider": "Video AI",
+  "status": "done",
+  "asset": "projects/test_movie/media/video/video_20260814_153451",
+  "result": {
+    "type": "video",
+    "prompt": "tracking shot",
+    "status": "generated",
+    "asset": null,
+    "metadata": {
+      "duration": null,
+      "fps": null
+    }
+  }
+}

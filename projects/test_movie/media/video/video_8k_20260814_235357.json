@@ -1,0 +1,17 @@
+{
+  "type": "video",
+  "prompt": "8K HDR cinematic space station shot",
+  "provider": "Video AI",
+  "quality": "8k",
+  "status": "done",
+  "result": {
+    "type": "video",
+    "prompt": "8K HDR cinematic space station shot",
+    "status": "generated",
+    "asset": null,
+    "metadata": {
+      "duration": null,
+      "fps": null
+    }
+  }
+}

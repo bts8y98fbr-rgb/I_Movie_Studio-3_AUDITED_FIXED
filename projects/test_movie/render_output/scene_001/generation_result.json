@@ -1,0 +1,250 @@
+{
+  "scene_id": 1,
+  "created": "2026-08-15T16:58:12.366967",
+  "quality": "8k",
+  "generated": 3,
+  "failed": 0,
+  "status": "completed",
+  "tasks": [
+    {
+      "task_id": "6dc1dd32",
+      "type": "video",
+      "prompt": "8K HDR cinematic shot, space station, fly through, wide_establishing, slow_orbit, anamorphic lens, volumetric lighting, cinematic color grading",
+      "provider": "Video AI",
+      "quality": "8k",
+      "status": "done",
+      "result": {
+        "asset_id": "d8691d8f",
+        "type": "video",
+        "provider": "Video AI",
+        "prompt": "8K HDR cinematic shot, space station, fly through, wide_establishing, slow_orbit, anamorphic lens, volumetric lighting, cinematic color grading",
+        "status": "generated",
+        "asset_path": "projects/test_movie/assets/video/scene_001/shot_001",
+        "asset_file": "projects/test_movie/assets/video/scene_001/shot_001/d8691d8f.json",
+        "created": "2026-08-15T16:58:12.364300",
+        "metadata": {
+          "scene_id": 1,
+          "shot_id": 1,
+          "duration": 3.33,
+          "fps": 60,
+          "resolution": "7680x4320",
+          "hdr": true,
+          "color_depth": 10,
+          "timeline": {
+            "start": 0.0,
+            "duration": 3.33
+          },
+          "camera": {
+            "type": "cinematic",
+            "shot_type": "wide_establishing",
+            "movement": "slow_orbit"
+          }
+        }
+      },
+      "output": "projects/test_movie/media/video/video_8k_20260815_165812_6dc1dd32.json",
+      "metadata": {
+        "scene_id": 1,
+        "shot_id": 1,
+        "timeline": {
+          "start": 0.0,
+          "duration": 3.33
+        },
+        "duration": 3.33,
+        "camera": {
+          "type": "cinematic",
+          "shot_type": "wide_establishing",
+          "movement": "slow_orbit"
+        },
+        "quality": {
+          "name": "Master 8K",
+          "resolution": "7680x4320",
+          "fps": 60,
+          "hdr": true,
+          "color_depth": 10,
+          "description": "Ultra cinematic 8K HDR master"
+        },
+        "shot_model_selection": {
+          "time": "2026-08-14T20:41:35.168300",
+          "shot_profile": "environment",
+          "camera": {
+            "shot_type": "wide_establishing",
+            "movement": "slow_orbit"
+          },
+          "selected_model": {
+            "status": "selected",
+            "selected_model": {
+              "name": "cinematic_video_ultra",
+              "type": "video",
+              "quality": 10,
+              "motion": 10,
+              "realism": 10,
+              "min_resolution": "7680x4320",
+              "hdr": true
+            },
+            "time": "2026-08-14T20:41:35.168242"
+          }
+        }
+      }
+    },
+    {
+      "task_id": "34010d8c",
+      "type": "video",
+      "prompt": "8K HDR cinematic shot, space station, fly through, hero_reveal, camera_push, anamorphic lens, volumetric lighting, cinematic color grading",
+      "provider": "Video AI",
+      "quality": "8k",
+      "status": "done",
+      "result": {
+        "asset_id": "dbb0faac",
+        "type": "video",
+        "provider": "Video AI",
+        "prompt": "8K HDR cinematic shot, space station, fly through, hero_reveal, camera_push, anamorphic lens, volumetric lighting, cinematic color grading",
+        "status": "generated",
+        "asset_path": "projects/test_movie/assets/video/scene_001/shot_002",
+        "asset_file": "projects/test_movie/assets/video/scene_001/shot_002/dbb0faac.json",
+        "created": "2026-08-15T16:58:12.365209",
+        "metadata": {
+          "scene_id": 1,
+          "shot_id": 2,
+          "duration": 3.33,
+          "fps": 60,
+          "resolution": "7680x4320",
+          "hdr": true,
+          "color_depth": 10,
+          "timeline": {
+            "start": 3.33,
+            "duration": 3.33
+          },
+          "camera": {
+            "type": "cinematic",
+            "shot_type": "hero_reveal",
+            "movement": "camera_push"
+          }
+        }
+      },
+      "output": "projects/test_movie/media/video/video_8k_20260815_165812_34010d8c.json",
+      "metadata": {
+        "scene_id": 1,
+        "shot_id": 2,
+        "timeline": {
+          "start": 3.33,
+          "duration": 3.33
+        },
+        "duration": 3.33,
+        "camera": {
+          "type": "cinematic",
+          "shot_type": "hero_reveal",
+          "movement": "camera_push"
+        },
+        "quality": {
+          "name": "Master 8K",
+          "resolution": "7680x4320",
+          "fps": 60,
+          "hdr": true,
+          "color_depth": 10,
+          "description": "Ultra cinematic 8K HDR master"
+        },
+        "shot_model_selection": {
+          "time": "2026-08-14T20:41:35.168317",
+          "shot_profile": "motion",
+          "camera": {
+            "shot_type": "hero_reveal",
+            "movement": "camera_push"
+          },
+          "selected_model": {
+            "status": "selected",
+            "selected_model": {
+              "name": "cinematic_video_ultra",
+              "type": "video",
+              "quality": 10,
+              "motion": 10,
+              "realism": 10,
+              "min_resolution": "7680x4320",
+              "hdr": true
+            },
+            "time": "2026-08-14T20:41:35.168314"
+          }
+        }
+      }
+    },
+    {
+      "task_id": "3b6f8ab6",
+      "type": "video",
+      "prompt": "8K HDR cinematic shot, space station, fly through, cinematic_close, slow_tracking, anamorphic lens, volumetric lighting, cinematic color grading",
+      "provider": "Video AI",
+      "quality": "8k",
+      "status": "done",
+      "result": {
+        "asset_id": "5c2192b8",
+        "type": "video",
+        "provider": "Video AI",
+        "prompt": "8K HDR cinematic shot, space station, fly through, cinematic_close, slow_tracking, anamorphic lens, volumetric lighting, cinematic color grading",
+        "status": "generated",
+        "asset_path": "projects/test_movie/assets/video/scene_001/shot_003",
+        "asset_file": "projects/test_movie/assets/video/scene_001/shot_003/5c2192b8.json",
+        "created": "2026-08-15T16:58:12.366234",
+        "metadata": {
+          "scene_id": 1,
+          "shot_id": 3,
+          "duration": 3.33,
+          "fps": 60,
+          "resolution": "7680x4320",
+          "hdr": true,
+          "color_depth": 10,
+          "timeline": {
+            "start": 6.67,
+            "duration": 3.33
+          },
+          "camera": {
+            "type": "cinematic",
+            "shot_type": "cinematic_close",
+            "movement": "slow_tracking"
+          }
+        }
+      },
+      "output": "projects/test_movie/media/video/video_8k_20260815_165812_3b6f8ab6.json",
+      "metadata": {
+        "scene_id": 1,
+        "shot_id": 3,
+        "timeline": {
+          "start": 6.67,
+          "duration": 3.33
+        },
+        "duration": 3.33,
+        "camera": {
+          "type": "cinematic",
+          "shot_type": "cinematic_close",
+          "movement": "slow_tracking"
+        },
+        "quality": {
+          "name": "Master 8K",
+          "resolution": "7680x4320",
+          "fps": 60,
+          "hdr": true,
+          "color_depth": 10,
+          "description": "Ultra cinematic 8K HDR master"
+        },
+        "shot_model_selection": {
+          "time": "2026-08-14T20:41:35.168326",
+          "shot_profile": "detail",
+          "camera": {
+            "shot_type": "cinematic_close",
+            "movement": "slow_tracking"
+          },
+          "selected_model": {
+            "status": "selected",
+            "selected_model": {
+              "name": "cinematic_video_ultra",
+              "type": "video",
+              "quality": 10,
+              "motion": 10,
+              "realism": 10,
+              "min_resolution": "7680x4320",
+              "hdr": true
+            },
+            "time": "2026-08-14T20:41:35.168324"
+          }
+        }
+      }
+    }
+  ]
+}

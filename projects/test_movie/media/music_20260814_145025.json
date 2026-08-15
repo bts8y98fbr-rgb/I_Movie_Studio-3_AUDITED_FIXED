@@ -1,0 +1,11 @@
+{
+  "type": "music",
+  "prompt": "dark ambient",
+  "provider": "Music AI",
+  "status": "done",
+  "result": {
+    "type": "music",
+    "prompt": "dark ambient",
+    "status": "queued"
+  }
+}

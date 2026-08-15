@@ -1,0 +1,17 @@
+{
+  "type": "voice",
+  "prompt": "deep voice",
+  "provider": "Voice AI",
+  "status": "done",
+  "asset": "projects/test_movie/media/voice/voice_20260814_153451",
+  "result": {
+    "type": "voice",
+    "prompt": "deep voice",
+    "status": "generated",
+    "asset": null,
+    "metadata": {
+      "duration": null,
+      "language": null
+    }
+  }
+}

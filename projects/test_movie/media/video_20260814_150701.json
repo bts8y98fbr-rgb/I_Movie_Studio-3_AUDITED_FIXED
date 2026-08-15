@@ -1,0 +1,16 @@
+{
+  "type": "video",
+  "prompt": "tracking shot",
+  "provider": "Video AI",
+  "status": "done",
+  "result": {
+    "type": "video",
+    "prompt": "tracking shot",
+    "status": "generated",
+    "asset": null,
+    "metadata": {
+      "duration": null,
+      "fps": null
+    }
+  }
+}
