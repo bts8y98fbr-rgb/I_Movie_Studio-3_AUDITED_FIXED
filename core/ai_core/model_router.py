@@ -1,13 +1,10 @@
 from datetime import datetime
 
-from core.ai_core.model_policy import SelectionMode
-
 
 class ModelRouter:
 
-    def __init__(self, quality_policy, model_policy=None):
+    def __init__(self, quality_policy):
         self.quality_policy = quality_policy
-        self.model_policy = model_policy
 
         self.models = {
             "video": [
@@ -17,27 +14,75 @@ class ModelRouter:
                     "quality": 10,
                     "motion": 10,
                     "realism": 10,
+                    "detail": 10,
+                    "profiles": [
+                        "cinematic",
+                        "environment",
+                        "detail",
+                    ],
                     "resolutions": [
                         "7680x4320",
                         "3840x2160",
                     ],
-                    "fps": [24, 30, 60],
-                    "hdr": [True],
-                    "color_depth": [10],
+                    "fps": [
+                        24,
+                        30,
+                        60,
+                    ],
+                    "hdr": [
+                        True,
+                    ],
+                    "color_depth": [
+                        10,
+                    ],
                 },
                 {
-                    "name": "cinematic_video_pro",
+                    "name": "cinematic_video_motion",
                     "type": "video",
                     "quality": 8,
-                    "motion": 9,
+                    "motion": 10,
                     "realism": 8,
+                    "detail": 7,
+                    "profiles": [
+                        "motion",
+                    ],
                     "resolutions": [
                         "3840x2160",
                         "1920x1080",
                     ],
-                    "fps": [24, 30, 60],
-                    "hdr": [True],
-                    "color_depth": [10],
+                    "fps": [
+                        60,
+                    ],
+                    "hdr": [
+                        True,
+                    ],
+                    "color_depth": [
+                        10,
+                    ],
+                },
+                {
+                    "name": "cinematic_video_detail",
+                    "type": "video",
+                    "quality": 9,
+                    "motion": 7,
+                    "realism": 10,
+                    "detail": 10,
+                    "profiles": [
+                        "detail",
+                    ],
+                    "resolutions": [
+                        "3840x2160",
+                    ],
+                    "fps": [
+                        24,
+                        30,
+                    ],
+                    "hdr": [
+                        True,
+                    ],
+                    "color_depth": [
+                        10,
+                    ],
                 },
             ],
 
@@ -47,121 +92,166 @@ class ModelRouter:
                     "type": "image",
                     "quality": 10,
                     "realism": 10,
-                    "hdr": [True],
-                    "color_depth": [10],
+                    "detail": 10,
+                    "hdr": [
+                        True,
+                    ],
+                    "color_depth": [
+                        10,
+                    ],
                 }
             ],
         }
 
 
-    def get_best_model(self, media_type="video"):
+    def get_best_model(
+        self,
+        media_type="video",
+        shot_context=None,
+    ):
 
         profile = self.quality_policy.get_profile()
 
-        available = self.models.get(media_type, [])
+        available = self.models.get(
+            media_type,
+            [],
+        )
+
 
         if not available:
             return {
                 "status": "error",
-                "message": f"No models available for {media_type}",
+                "message": (
+                    f"No models available for media type: {media_type}"
+                ),
             }
 
 
-        candidates = [
-            model
-            for model in available
-            if (
-                not profile["hdr"]
-                or self._supports_hdr(model)
-            )
-        ]
+        candidates = []
 
-
-        if not candidates:
-            return {
-                "status": "error",
-                "message": "No compatible models",
-            }
-
-
-        selected = self._apply_model_policy(
-            candidates,
-            media_type,
+        shot_profile = (
+            shot_context or {}
+        ).get(
+            "profile",
+            "cinematic",
         )
 
 
-        quality = self._resolve_model_quality(
-            selected,
-            profile,
+        for model in available:
+
+            profiles = model.get(
+                "profiles",
+                [],
+            )
+
+            if profiles and shot_profile not in profiles:
+                continue
+
+
+            if (
+                profile["hdr"]
+                and not self._supports_hdr(model)
+            ):
+                continue
+
+
+            candidates.append(model)
+
+
+        if not candidates:
+            candidates = available
+
+
+        best = sorted(
+            candidates,
+            key=lambda model: self._score_model(
+                model,
+                shot_profile,
+            ),
+            reverse=True,
+        )[0]
+
+
+        quality_resolution = (
+            self._resolve_model_quality(
+                best,
+                profile,
+            )
         )
 
 
         return {
-            "status": quality["status"],
-            "selected_model": selected,
-            "requested_quality": quality["requested_quality"],
-            "actual_quality": quality["actual_quality"],
-            "fallback_applied": quality["fallback_applied"],
-            "notification": quality["notification"],
-            "time": datetime.now().isoformat(),
+
+            "status":
+                quality_resolution["status"],
+
+
+            "selected_model":
+                best,
+
+
+            "shot_profile":
+                shot_profile,
+
+
+            "requested_quality":
+                quality_resolution["requested_quality"],
+
+
+            "actual_quality":
+                quality_resolution["actual_quality"],
+
+
+            "fallback_applied":
+                quality_resolution["fallback_applied"],
+
+
+            "notification":
+                quality_resolution["notification"],
+
+
+            "time":
+                datetime.now().isoformat(),
+
         }
 
 
 
-    def _apply_model_policy(
+    def _score_model(
         self,
-        candidates,
-        media_type,
+        model,
+        profile,
     ):
 
-        if self.model_policy is None:
-            return self._best(candidates)
-
-
-        mode = self.model_policy.mode
-
-
-        if mode == SelectionMode.FIXED:
-
-            for model in candidates:
-                if self.model_policy.allows(
-                    self.model_policy.provider,
-                    model["name"],
-                ):
-                    return model
-
-
-            return self._best(candidates)
-
-
-        if mode == SelectionMode.PREFERRED:
-
-            for preferred in self.model_policy.models:
-
-                for model in candidates:
-                    if model["name"] == preferred:
-                        return model
-
-
-            return self._best(candidates)
-
-
-        return self._best(candidates)
-
-
-
-    @staticmethod
-    def _best(models):
-
-        return sorted(
-            models,
-            key=lambda model: (
+        if profile == "motion":
+            return (
+                model.get("motion", 0),
                 model.get("quality", 0),
                 model.get("realism", 0),
-                model.get("motion", 0),
-            ),
-            reverse=True,
-        )[0]
+            )
+
+
+        if profile == "detail":
+            return (
+                model.get("detail", 0),
+                model.get("realism", 0),
+                model.get("quality", 0),
+            )
+
+
+        if profile == "environment":
+            return (
+                model.get("realism", 0),
+                model.get("detail", 0),
+                model.get("quality", 0),
+            )
+
+
+        return (
+            model.get("quality", 0),
+            model.get("realism", 0),
+            model.get("motion", 0),
+        )
 
 
 
@@ -172,32 +262,48 @@ class ModelRouter:
     ):
 
         capabilities = {
-            "resolutions": model.get(
-                "resolutions",
-                [],
-            ),
-            "fps": model.get(
-                "fps",
-                [],
-            ),
-            "hdr": model.get(
-                "hdr",
-                [],
-            ),
-            "color_depth": model.get(
-                "color_depth",
-                [],
-            ),
+
+            "resolutions":
+                model.get(
+                    "resolutions",
+                    [],
+                ),
+
+            "fps":
+                model.get(
+                    "fps",
+                    [],
+                ),
+
+            "hdr":
+                model.get(
+                    "hdr",
+                    [],
+                ),
+
+            "color_depth":
+                model.get(
+                    "color_depth",
+                    [],
+                ),
+
         }
 
 
         return self.quality_policy.resolve_quality(
             capabilities=capabilities,
             requested={
-                "resolution": profile["resolution"],
-                "fps": profile["fps"],
-                "hdr": profile["hdr"],
-                "color_depth": profile["color_depth"],
+                "resolution":
+                    profile["resolution"],
+
+                "fps":
+                    profile["fps"],
+
+                "hdr":
+                    profile["hdr"],
+
+                "color_depth":
+                    profile["color_depth"],
             },
         )
 
@@ -211,7 +317,10 @@ class ModelRouter:
             False,
         )
 
-        if isinstance(hdr, list):
+        if isinstance(
+            hdr,
+            list,
+        ):
             return True in hdr
 
         return bool(hdr)
