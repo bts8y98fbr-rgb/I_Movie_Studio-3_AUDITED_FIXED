@@ -1,11 +1,13 @@
 from datetime import datetime
-from typing import Any
+
+from core.ai_core.model_policy import SelectionMode
 
 
 class ModelRouter:
 
-    def __init__(self, quality_policy):
+    def __init__(self, quality_policy, model_policy=None):
         self.quality_policy = quality_policy
+        self.model_policy = model_policy
 
         self.models = {
             "video": [
@@ -15,8 +17,10 @@ class ModelRouter:
                     "quality": 10,
                     "motion": 10,
                     "realism": 10,
-                    "min_resolution": "7680x4320",
-                    "resolutions": ["7680x4320", "3840x2160"],
+                    "resolutions": [
+                        "7680x4320",
+                        "3840x2160",
+                    ],
                     "fps": [24, 30, 60],
                     "hdr": [True],
                     "color_depth": [10],
@@ -27,13 +31,16 @@ class ModelRouter:
                     "quality": 8,
                     "motion": 9,
                     "realism": 8,
-                    "min_resolution": "3840x2160",
-                    "resolutions": ["3840x2160", "1920x1080"],
+                    "resolutions": [
+                        "3840x2160",
+                        "1920x1080",
+                    ],
                     "fps": [24, 30, 60],
                     "hdr": [True],
                     "color_depth": [10],
                 },
             ],
+
             "image": [
                 {
                     "name": "image_master",
@@ -46,32 +53,108 @@ class ModelRouter:
             ],
         }
 
+
     def get_best_model(self, media_type="video"):
+
         profile = self.quality_policy.get_profile()
+
         available = self.models.get(media_type, [])
 
         if not available:
             return {
                 "status": "error",
-                "message": f"No models available for media type: {media_type}",
+                "message": f"No models available for {media_type}",
             }
 
-        candidates = []
 
-        for model in available:
-            if profile["hdr"] and not self._supports_hdr(model):
-                continue
+        candidates = [
+            model
+            for model in available
+            if (
+                not profile["hdr"]
+                or self._supports_hdr(model)
+            )
+        ]
 
-            candidates.append(model)
 
         if not candidates:
             return {
                 "status": "error",
-                "message": "No model supports the required HDR capability",
+                "message": "No compatible models",
             }
 
-        best = sorted(
+
+        selected = self._apply_model_policy(
             candidates,
+            media_type,
+        )
+
+
+        quality = self._resolve_model_quality(
+            selected,
+            profile,
+        )
+
+
+        return {
+            "status": quality["status"],
+            "selected_model": selected,
+            "requested_quality": quality["requested_quality"],
+            "actual_quality": quality["actual_quality"],
+            "fallback_applied": quality["fallback_applied"],
+            "notification": quality["notification"],
+            "time": datetime.now().isoformat(),
+        }
+
+
+
+    def _apply_model_policy(
+        self,
+        candidates,
+        media_type,
+    ):
+
+        if self.model_policy is None:
+            return self._best(candidates)
+
+
+        mode = self.model_policy.mode
+
+
+        if mode == SelectionMode.FIXED:
+
+            for model in candidates:
+                if self.model_policy.allows(
+                    self.model_policy.provider,
+                    model["name"],
+                ):
+                    return model
+
+
+            return self._best(candidates)
+
+
+        if mode == SelectionMode.PREFERRED:
+
+            for preferred in self.model_policy.models:
+
+                for model in candidates:
+                    if model["name"] == preferred:
+                        return model
+
+
+            return self._best(candidates)
+
+
+        return self._best(candidates)
+
+
+
+    @staticmethod
+    def _best(models):
+
+        return sorted(
+            models,
             key=lambda model: (
                 model.get("quality", 0),
                 model.get("realism", 0),
@@ -80,43 +163,33 @@ class ModelRouter:
             reverse=True,
         )[0]
 
-        quality_resolution = self._resolve_model_quality(best, profile)
 
-        return {
-            "status": quality_resolution["status"],
-            "selected_model": best,
-            "requested_quality": quality_resolution["requested_quality"],
-            "actual_quality": quality_resolution["actual_quality"],
-            "fallback_applied": quality_resolution["fallback_applied"],
-            "notification": quality_resolution["notification"],
-            "time": datetime.now().isoformat(),
-        }
 
-    def _resolve_model_quality(self, model, profile):
+    def _resolve_model_quality(
+        self,
+        model,
+        profile,
+    ):
+
         capabilities = {
-            "resolutions": model.get("resolutions", []),
-            "fps": model.get("fps", []),
+            "resolutions": model.get(
+                "resolutions",
+                [],
+            ),
+            "fps": model.get(
+                "fps",
+                [],
+            ),
             "hdr": model.get(
                 "hdr",
-                [model.get("hdr", False)]
-                if isinstance(model.get("hdr"), bool)
-                else [],
+                [],
             ),
-            "color_depth": model.get("color_depth", []),
+            "color_depth": model.get(
+                "color_depth",
+                [],
+            ),
         }
 
-        # Backward compatibility with old model definitions.
-        if not capabilities["resolutions"]:
-            min_resolution = model.get("min_resolution")
-
-            if min_resolution:
-                capabilities["resolutions"] = [min_resolution]
-
-        if not capabilities["fps"]:
-            capabilities["fps"] = [profile["fps"]]
-
-        if not capabilities["color_depth"]:
-            capabilities["color_depth"] = [profile["color_depth"]]
 
         return self.quality_policy.resolve_quality(
             capabilities=capabilities,
@@ -128,9 +201,15 @@ class ModelRouter:
             },
         )
 
+
+
     @staticmethod
-    def _supports_hdr(model) -> bool:
-        hdr = model.get("hdr", False)
+    def _supports_hdr(model):
+
+        hdr = model.get(
+            "hdr",
+            False,
+        )
 
         if isinstance(hdr, list):
             return True in hdr
