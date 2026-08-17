@@ -17,6 +17,21 @@ class VideoProvider(BaseAIProvider):
     def __init__(self, name="Video AI"):
         super().__init__(name)
 
+    def capabilities(self):
+        return {
+            "media_types": ["video"],
+            "resolutions": ["1920x1080", "3840x2160", "7680x4320"],
+            "fps": [24, 30, 60],
+            "hdr": [False, True],
+            "color_depth": [8, 10],
+            "audio": {
+                "quality": "high",
+                "channels": 2,
+                "channel_layout": "stereo",
+            },
+            "implementation": "deterministic_manifest_adapter",
+        }
+
     def generate(self, prompt, **kwargs):
         project_path = Path(kwargs.get("project_path") or "projects/test_movie")
         metadata = dict(kwargs.get("metadata") or {})
