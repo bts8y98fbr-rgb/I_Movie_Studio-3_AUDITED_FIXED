@@ -5,22 +5,41 @@ from pathlib import Path
 
 class AssetRegistry:
 
-    def __init__(self, project_path):
+    def __init__(
+        self,
+        project_path
+    ):
 
         self.project_path = Path(
             project_path
         )
 
-        self.registry_file = (
+        self.asset_root = (
             self.project_path
             / "assets"
+        )
+
+        self.registry_file = (
+            self.asset_root
             / "registry.json"
         )
 
-        self.registry_file.parent.mkdir(
+        self.version_root = (
+            self.asset_root
+            / "versions"
+        )
+
+
+        self.asset_root.mkdir(
             parents=True,
             exist_ok=True,
         )
+
+        self.version_root.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
 
         if not self.registry_file.exists():
 
@@ -95,9 +114,11 @@ class AssetRegistry:
                     {},
                 ),
 
-            "asset_path":
-                asset.get(
-                    "asset_path"
+            "version":
+                self._next_version(
+                    asset.get(
+                        "asset_id"
+                    )
                 ),
 
             "created":
@@ -116,7 +137,132 @@ class AssetRegistry:
         )
 
 
+        self.create_version(
+            record["asset_id"],
+            record,
+        )
+
+
         return record
+
+
+
+    def create_version(
+        self,
+        asset_id,
+        data,
+    ):
+
+        versions = (
+            self.get_versions(
+                asset_id
+            )
+        )
+
+        version_number = (
+            len(versions) + 1
+        )
+
+
+        version_name = (
+            f"v{version_number:03d}"
+        )
+
+
+        version_dir = (
+            self.version_root
+            / asset_id
+            / version_name
+        )
+
+
+        version_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+
+        version_file = (
+            version_dir
+            / "asset.json"
+        )
+
+
+        version_file.write_text(
+            json.dumps(
+                data,
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+
+        return version_name
+
+
+
+    def get_versions(
+        self,
+        asset_id
+    ):
+
+        folder = (
+            self.version_root
+            / asset_id
+        )
+
+
+        if not folder.exists():
+
+            return []
+
+
+        return sorted(
+            [
+                item.name
+                for item in folder.iterdir()
+                if item.is_dir()
+            ]
+        )
+
+
+
+    def get_latest_version(
+        self,
+        asset_id
+    ):
+
+        versions = (
+            self.get_versions(
+                asset_id
+            )
+        )
+
+
+        if not versions:
+
+            return None
+
+
+        return versions[-1]
+
+
+
+    def _next_version(
+        self,
+        asset_id
+    ):
+
+        versions = (
+            self.get_versions(
+                asset_id
+            )
+        )
+
+        return (
+            len(versions) + 1
+        )
 
 
 
@@ -133,17 +279,13 @@ class AssetRegistry:
         asset_id
     ):
 
-        assets = self._load()
-
-
-        for asset in assets:
+        for asset in self._load():
 
             if asset.get(
                 "asset_id"
             ) == asset_id:
 
                 return asset
-
 
         return None
 
@@ -154,14 +296,11 @@ class AssetRegistry:
         scene_id
     ):
 
-        assets = self._load()
-
-
         return [
 
             asset
 
-            for asset in assets
+            for asset in self._load()
 
             if asset.get(
                 "metadata",
@@ -179,14 +318,11 @@ class AssetRegistry:
         shot_id
     ):
 
-        assets = self._load()
-
-
         return [
 
             asset
 
-            for asset in assets
+            for asset in self._load()
 
             if asset.get(
                 "metadata",
@@ -204,14 +340,11 @@ class AssetRegistry:
         asset_type
     ):
 
-        assets = self._load()
-
-
         return [
 
             asset
 
-            for asset in assets
+            for asset in self._load()
 
             if asset.get(
                 "type"
