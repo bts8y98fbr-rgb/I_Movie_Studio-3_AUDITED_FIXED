@@ -2,9 +2,10 @@ from pathlib import Path
 from datetime import datetime
 import json
 
+from core.ai_core.asset_registry import AssetRegistry
+
 
 class AIResultStorage:
-
 
     def __init__(
         self,
@@ -15,20 +16,19 @@ class AIResultStorage:
             project_path
         )
 
-
         self.asset_path = (
-
-            self.project_path /
-            "assets"
-
+            self.project_path
+            / "assets"
         )
-
 
         self.asset_path.mkdir(
             parents=True,
-            exist_ok=True
+            exist_ok=True,
         )
 
+        self.registry = AssetRegistry(
+            self.project_path
+        )
 
 
     def save_result(
@@ -36,18 +36,14 @@ class AIResultStorage:
         task
     ):
 
-
         metadata = task.metadata or {}
 
-
         task_type = task.task_type
-
 
         scene_id = metadata.get(
             "scene_id",
             0
         )
-
 
         shot_id = metadata.get(
             "shot_id",
@@ -55,67 +51,57 @@ class AIResultStorage:
         )
 
 
-
         asset_dir = (
-
-            self.asset_path /
-            task_type /
-            f"scene_{int(scene_id):03d}" /
-            f"shot_{int(shot_id):03d}"
-
+            self.asset_path
+            / task_type
+            / f"scene_{int(scene_id):03d}"
+            / f"shot_{int(shot_id):03d}"
         )
 
 
         asset_dir.mkdir(
             parents=True,
-            exist_ok=True
+            exist_ok=True,
         )
-
 
 
         asset_file = (
-
-            asset_dir /
-            "asset.json"
-
+            asset_dir
+            / "asset.json"
         )
-
 
 
         data = {
 
-
             "asset_id":
                 task.task_id,
-
 
             "type":
                 task_type,
 
-
             "prompt":
                 task.prompt,
-
 
             "provider":
                 task.provider.name,
 
+            "model":
+                metadata.get(
+                    "shot_model_selection",
+                    {},
+                ),
 
             "quality":
                 task.quality,
 
-
             "status":
                 task.status,
-
 
             "created":
                 datetime.now().isoformat(),
 
-
             "metadata":
                 metadata,
-
 
             "result":
                 task.result
@@ -123,19 +109,26 @@ class AIResultStorage:
         }
 
 
-
         asset_file.write_text(
-
             json.dumps(
                 data,
                 indent=2,
-                ensure_ascii=False
+                ensure_ascii=False,
             ),
-
-            encoding="utf-8"
-
+            encoding="utf-8",
         )
 
+
+        registry_record = (
+            self.registry.register(
+                data
+            )
+        )
+
+
+        data["registry"] = (
+            registry_record
+        )
 
 
         return asset_file
