@@ -1,9 +1,10 @@
 from datetime import datetime
+import json
 from pathlib import Path
 from queue import Queue
-import json
 import uuid
 
+from core.ai_core.ai_audit_log import AIAuditLog
 from core.ai_core.result_storage import AIResultStorage
 
 
@@ -19,10 +20,7 @@ class GenerationTask:
         metadata=None,
     ):
 
-        self.task_id = str(
-            uuid.uuid4()
-        )[:8]
-
+        self.task_id = str(uuid.uuid4())[:8]
         self.task_type = task_type
         self.prompt = prompt
         self.provider = provider
@@ -32,7 +30,6 @@ class GenerationTask:
             if project_path
             else None
         )
-
         self.metadata = dict(
             metadata or {}
         )
@@ -70,6 +67,22 @@ class GenerationQueue:
 
 
 
+    def _audit(
+        self,
+        task
+    ):
+
+        if not task.project_path:
+
+            return None
+
+
+        return AIAuditLog(
+            task.project_path
+        )
+
+
+
     def process_next(
         self
     ):
@@ -81,29 +94,95 @@ class GenerationQueue:
 
         task = self.queue.get()
 
+        task.status = "processing"
 
-        task.status = (
-            "processing"
+
+        audit = self._audit(
+            task
         )
 
 
         try:
 
-            task.result = (
-                task.provider.generate(
-                    task.prompt,
-                    quality=task.quality,
-                    model=task.metadata.get(
-                        "shot_model_selection",
-                        {},
-                    ),
-                    project_path=task.project_path,
-                    metadata=task.metadata,
+            selected_model = task.metadata.get(
+                "shot_model_selection",
+                {},
+            )
+
+
+            if audit:
+
+                audit.record(
+                    "model_selection",
+                    {
+                        "scene_id":
+                            task.metadata.get(
+                                "scene_id"
+                            ),
+
+                        "shot_id":
+                            task.metadata.get(
+                                "shot_id"
+                            ),
+
+                        "model":
+                            selected_model.get(
+                                "selected_model",
+                                {},
+                            ),
+
+                        "provider":
+                            task.provider.name,
+
+                        "quality":
+                            task.quality,
+                    }
                 )
+
+
+
+            task.result = task.provider.generate(
+                task.prompt,
+                quality=task.quality,
+                model=selected_model,
+                project_path=task.project_path,
+                metadata=task.metadata,
             )
 
 
             task.status = "done"
+
+
+
+            if audit:
+
+                audit.record(
+                    "generation_complete",
+                    {
+                        "scene_id":
+                            task.metadata.get(
+                                "scene_id"
+                            ),
+
+                        "shot_id":
+                            task.metadata.get(
+                                "shot_id"
+                            ),
+
+                        "asset_id":
+                            task.result.get(
+                                "asset_id"
+                            )
+                            if isinstance(
+                                task.result,
+                                dict
+                            )
+                            else None,
+
+                        "status":
+                            task.status,
+                    }
+                )
 
 
 
@@ -112,7 +191,6 @@ class GenerationQueue:
             task.status = "failed"
 
             task.result = {
-
                 "type":
                     task.task_type,
 
@@ -121,8 +199,28 @@ class GenerationQueue:
 
                 "error":
                     str(exc),
-
             }
+
+
+            if audit:
+
+                audit.record(
+                    "generation_failed",
+                    {
+                        "scene_id":
+                            task.metadata.get(
+                                "scene_id"
+                            ),
+
+                        "shot_id":
+                            task.metadata.get(
+                                "shot_id"
+                            ),
+
+                        "error":
+                            str(exc),
+                    }
+                )
 
 
 
@@ -150,15 +248,13 @@ class GenerationQueue:
         )
 
 
-        target = (
-            storage.save_result(
-                task
-            )
+        target = storage.save_result(
+            task
         )
 
 
-        task.output = (
-            str(target)
+        task.output = str(
+            target
         )
 
 
@@ -191,7 +287,6 @@ class GenerationQueue:
         return [
 
             {
-
                 "task_id":
                     task.task_id,
 
@@ -218,7 +313,6 @@ class GenerationQueue:
 
                 "metadata":
                     task.metadata,
-
             }
 
             for task in self.tasks
