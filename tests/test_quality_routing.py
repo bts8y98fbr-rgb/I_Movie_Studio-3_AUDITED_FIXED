@@ -89,3 +89,48 @@ def test_model_router_keeps_generation_routable_when_4k_is_unavailable():
     assert result["actual_quality"]["resolution"] == "1920x1080"
     assert result["actual_quality"]["fps"] == 30
     assert result["actual_quality"]["color_depth"] == 8
+
+
+def test_provider_registry_register_get_and_unregister():
+    from core.ai_core.providers import VideoProvider
+    from core.ai_core.providers.provider_registry import ProviderRegistry
+
+    registry = ProviderRegistry()
+    provider = VideoProvider()
+
+    assert registry.register(provider) is provider
+    assert registry.get("Video AI") is provider
+    assert registry.list_names() == ["Video AI"]
+    assert registry.list_providers() == [provider]
+
+    assert registry.unregister("Video AI") is provider
+    assert registry.get("Video AI") is None
+    assert registry.list_names() == []
+
+
+def test_provider_manager_uses_injected_registry():
+    from core.ai_core.provider_manager import ProviderManager
+    from core.ai_core.providers.provider_registry import ProviderRegistry
+
+    registry = ProviderRegistry()
+    manager = ProviderManager(registry)
+
+    manager.load_default_providers()
+
+    assert manager.registry is registry
+    assert manager.get("Video AI") is registry.get("Video AI")
+    assert len(manager.list_providers()) == 4
+
+
+def test_provider_manager_can_unregister_provider():
+    from core.ai_core.provider_manager import ProviderManager
+
+    manager = ProviderManager()
+    manager.load_default_providers()
+
+    removed = manager.unregister("Video AI")
+
+    assert removed is not None
+    assert removed.name == "Video AI"
+    assert manager.get("Video AI") is None
+    assert len(manager.list_providers()) == 3
