@@ -10,7 +10,7 @@ class VideoProvider(BaseAIProvider):
     """Deterministic video-generation adapter.
 
     Creates a generation manifest instead of a real video file.
-    The provider contract remains compatible with future external APIs.
+    Keeps compatibility with future external video APIs.
     """
 
     def __init__(self, name="Video AI"):
@@ -50,9 +50,7 @@ class VideoProvider(BaseAIProvider):
     def generate(self, prompt, **kwargs):
 
         project_path = Path(
-            kwargs.get(
-                "project_path"
-            )
+            kwargs.get("project_path")
             or "projects/test_movie"
         )
 
@@ -62,7 +60,8 @@ class VideoProvider(BaseAIProvider):
         )
 
         model = kwargs.get(
-            "model"
+            "model",
+            {},
         )
 
 
@@ -142,6 +141,14 @@ class VideoProvider(BaseAIProvider):
         )
 
 
+        selected_model = {}
+
+        if isinstance(
+            model,
+            dict,
+        ):
+            selected_model = model
+
 
         result = {
 
@@ -151,7 +158,7 @@ class VideoProvider(BaseAIProvider):
 
             "provider": self.name,
 
-            "model": model,
+            "model": selected_model,
 
             "prompt": prompt,
 
@@ -204,7 +211,12 @@ class VideoProvider(BaseAIProvider):
                     {},
                 ),
 
-                "selected_model": model,
+                "shot_model_selection": metadata.get(
+                    "shot_model_selection",
+                    {},
+                ),
+
+                "selected_model": selected_model,
 
             },
 
