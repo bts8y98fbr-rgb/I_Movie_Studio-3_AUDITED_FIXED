@@ -1,11 +1,12 @@
-from datetime import datetime
-import json
-from pathlib import Path
 from queue import Queue
+from pathlib import Path
 import uuid
+
+from core.ai_core.result_storage import AIResultStorage
 
 
 class GenerationTask:
+
     def __init__(
         self,
         task_type,
@@ -20,11 +21,18 @@ class GenerationTask:
         self.prompt = prompt
         self.provider = provider
         self.quality = quality
-        self.project_path = Path(project_path) if project_path else None
-        self.metadata = dict(metadata or {})
+        self.project_path = (
+            Path(project_path)
+            if project_path
+            else None
+        )
+        self.metadata = dict(
+            metadata or {}
+        )
         self.status = "waiting"
         self.result = None
         self.output = None
+
 
 
 class GenerationQueue:
@@ -35,60 +43,34 @@ class GenerationQueue:
 
 
     def add_task(self, task):
+
         self.queue.put(task)
         self.tasks.append(task)
+
         return task
 
 
+
     def save_result(self, task):
+
         if not task.project_path:
             return None
 
-        folder = (
+
+        storage = AIResultStorage(
             task.project_path
-            / "media"
-            / task.task_type
         )
 
-        folder.mkdir(
-            parents=True,
-            exist_ok=True,
+
+        target = storage.save_result(
+            task
         )
 
-        timestamp = datetime.now().strftime(
-            "%Y%m%d_%H%M%S"
-        )
-
-        filename = (
-            f"{task.task_type}_{task.quality}_"
-            f"{timestamp}_{task.task_id}.json"
-        )
-
-        target = folder / filename
-
-        data = {
-            "task_id": task.task_id,
-            "type": task.task_type,
-            "prompt": task.prompt,
-            "provider": task.provider.name,
-            "quality": task.quality,
-            "status": task.status,
-            "metadata": task.metadata,
-            "result": task.result,
-        }
-
-        target.write_text(
-            json.dumps(
-                data,
-                indent=2,
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
 
         task.output = str(target)
 
         return target
+
 
 
     def process_next(self):
@@ -135,6 +117,7 @@ class GenerationQueue:
 
         self.save_result(task)
 
+
         return task
 
 
@@ -143,11 +126,13 @@ class GenerationQueue:
 
         results = []
 
+
         while not self.queue.empty():
 
             results.append(
                 self.process_next()
             )
+
 
         return results
 
