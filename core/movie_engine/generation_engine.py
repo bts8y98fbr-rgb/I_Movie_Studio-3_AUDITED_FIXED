@@ -4,6 +4,7 @@ from pathlib import Path
 
 from core.ai_core.generation_queue import GenerationQueue, GenerationTask
 from core.ai_core.provider_manager import ProviderManager
+from core.ai_core.quality_policy import QualityPolicy
 
 
 class GenerationEngine:
@@ -12,6 +13,7 @@ class GenerationEngine:
         self.quality = quality
         self.provider_manager = ProviderManager()
         self.provider_manager.load_default_providers()
+        self.quality_policy = QualityPolicy()
         self.queue = GenerationQueue()
 
     def generate_scene(self, scene_id):
@@ -38,16 +40,33 @@ class GenerationEngine:
             if shot_id is None:
                 raise ValueError("Render plan shot is missing shot_id")
 
+            requested_quality = dict(
+                shot.get(
+                    "quality",
+                    render_plan.get("render_settings", {}),
+                )
+                or {}
+            )
+
+            if not requested_quality:
+                requested_quality = self.quality_policy.get_video_defaults()
+
+            resolved_quality = self.quality_policy.resolve_quality(
+                capabilities=video_provider.capabilities(),
+                requested=requested_quality,
+            )
+
             metadata = {
                 "scene_id": scene_id,
                 "shot_id": shot_id,
                 "timeline": shot.get("timeline", {}),
                 "duration": shot.get("timeline", {}).get("duration"),
                 "camera": shot.get("camera", {}),
-                "quality": shot.get(
-                    "quality",
-                    render_plan.get("render_settings", {}),
-                ),
+                "quality": resolved_quality["actual_quality"],
+                "requested_quality": resolved_quality["requested_quality"],
+                "actual_quality": resolved_quality["actual_quality"],
+                "fallback_applied": resolved_quality["fallback_applied"],
+                "quality_notification": resolved_quality["notification"],
                 "shot_model_selection": shot.get(
                     "shot_model_selection",
                     {},
