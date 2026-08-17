@@ -23,6 +23,7 @@ class AssetRegistry:
         )
 
         if not self.registry_file.exists():
+
             self.registry_file.write_text(
                 json.dumps(
                     [],
@@ -42,7 +43,10 @@ class AssetRegistry:
         )
 
 
-    def _save(self, assets):
+    def _save(
+        self,
+        assets
+    ):
 
         self.registry_file.write_text(
             json.dumps(
@@ -54,44 +58,199 @@ class AssetRegistry:
         )
 
 
-    def register(self, asset):
+    def register(
+        self,
+        asset
+    ):
 
         assets = self._load()
 
+
         record = {
-            "asset_id": asset.get(
-                "asset_id"
-            ),
-            "type": asset.get(
-                "type"
-            ),
-            "provider": asset.get(
-                "provider"
-            ),
-            "model": asset.get(
-                "model",
-                {},
-            ),
-            "metadata": asset.get(
-                "metadata",
-                {},
-            ),
-            "asset_path": asset.get(
-                "asset_path"
-            ),
-            "created": datetime.now().isoformat(),
+
+            "asset_id":
+                asset.get(
+                    "asset_id"
+                ),
+
+            "type":
+                asset.get(
+                    "type"
+                ),
+
+            "provider":
+                asset.get(
+                    "provider"
+                ),
+
+            "model":
+                asset.get(
+                    "model",
+                    {},
+                ),
+
+            "metadata":
+                asset.get(
+                    "metadata",
+                    {},
+                ),
+
+            "asset_path":
+                asset.get(
+                    "asset_path"
+                ),
+
+            "created":
+                datetime.now().isoformat(),
+
         }
 
 
-        assets.append(record)
+        assets.append(
+            record
+        )
+
 
         self._save(
             assets
         )
 
+
         return record
 
 
-    def list_assets(self):
+
+    def list_assets(
+        self
+    ):
 
         return self._load()
+
+
+
+    def get_asset(
+        self,
+        asset_id
+    ):
+
+        assets = self._load()
+
+
+        for asset in assets:
+
+            if asset.get(
+                "asset_id"
+            ) == asset_id:
+
+                return asset
+
+
+        return None
+
+
+
+    def find_by_scene(
+        self,
+        scene_id
+    ):
+
+        assets = self._load()
+
+
+        return [
+
+            asset
+
+            for asset in assets
+
+            if asset.get(
+                "metadata",
+                {}
+            ).get(
+                "scene_id"
+            ) == scene_id
+
+        ]
+
+
+
+    def find_by_shot(
+        self,
+        shot_id
+    ):
+
+        assets = self._load()
+
+
+        return [
+
+            asset
+
+            for asset in assets
+
+            if asset.get(
+                "metadata",
+                {}
+            ).get(
+                "shot_id"
+            ) == shot_id
+
+        ]
+
+
+
+    def find_by_type(
+        self,
+        asset_type
+    ):
+
+        assets = self._load()
+
+
+        return [
+
+            asset
+
+            for asset in assets
+
+            if asset.get(
+                "type"
+            ) == asset_type
+
+        ]
+
+
+
+    def remove_asset(
+        self,
+        asset_id
+    ):
+
+        assets = self._load()
+
+
+        filtered = [
+
+            asset
+
+            for asset in assets
+
+            if asset.get(
+                "asset_id"
+            ) != asset_id
+
+        ]
+
+
+        removed = (
+            len(filtered)
+            != len(assets)
+        )
+
+
+        self._save(
+            filtered
+        )
+
+
+        return removed
