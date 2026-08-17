@@ -1,5 +1,5 @@
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 import json
 
 from core.ai_core.asset_registry import AssetRegistry
@@ -36,9 +36,13 @@ class AIResultStorage:
         task
     ):
 
-        metadata = task.metadata or {}
+        metadata = dict(
+            task.metadata or {}
+        )
+
 
         task_type = task.task_type
+
 
         scene_id = metadata.get(
             "scene_id",
@@ -48,6 +52,61 @@ class AIResultStorage:
         shot_id = metadata.get(
             "shot_id",
             0
+        )
+
+
+        asset_id = (
+            task.result.get(
+                "asset_id",
+                task.task_id,
+            )
+            if isinstance(
+                task.result,
+                dict
+            )
+            else task.task_id
+        )
+
+
+        model_selection = metadata.get(
+            "shot_model_selection",
+            {},
+        )
+
+
+        asset_record = {
+
+            "asset_id":
+                asset_id,
+
+            "type":
+                task_type,
+
+            "provider":
+                task.provider.name,
+
+            "model":
+                model_selection,
+
+            "quality":
+                task.quality,
+
+            "metadata":
+                metadata,
+
+            "status":
+                task.status,
+
+            "created":
+                datetime.now().isoformat(),
+
+        }
+
+
+        registry_record = (
+            self.registry.register(
+                asset_record
+            )
         )
 
 
@@ -74,7 +133,7 @@ class AIResultStorage:
         data = {
 
             "asset_id":
-                task.task_id,
+                asset_id,
 
             "type":
                 task_type,
@@ -86,10 +145,7 @@ class AIResultStorage:
                 task.provider.name,
 
             "model":
-                metadata.get(
-                    "shot_model_selection",
-                    {},
-                ),
+                model_selection,
 
             "quality":
                 task.quality,
@@ -100,11 +156,14 @@ class AIResultStorage:
             "created":
                 datetime.now().isoformat(),
 
+            "registry":
+                registry_record,
+
             "metadata":
                 metadata,
 
             "result":
-                task.result
+                task.result,
 
         }
 
@@ -116,18 +175,6 @@ class AIResultStorage:
                 ensure_ascii=False,
             ),
             encoding="utf-8",
-        )
-
-
-        registry_record = (
-            self.registry.register(
-                data
-            )
-        )
-
-
-        data["registry"] = (
-            registry_record
         )
 
 
