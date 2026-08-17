@@ -5,62 +5,58 @@ class ShotModelSelector:
 
     def __init__(
         self,
-        model_router
+        model_router,
     ):
-
         self.model_router = model_router
 
 
     def select_for_shot(
         self,
-        shot
+        shot,
     ):
 
-        shot_type = (
-            shot
-            .get("camera", {})
-            .get("shot_type", "")
+        camera = shot.get(
+            "camera",
+            {},
         )
 
 
-        movement = (
-            shot
-            .get("camera", {})
-            .get("movement", "")
+        shot_type = camera.get(
+            "shot_type",
+            "",
         )
 
 
-        profile = "cinematic"
+        movement = camera.get(
+            "movement",
+            "",
+        )
 
 
-        if shot_type in [
-            "wide_establishing",
-            "epic_space"
-        ]:
-
-            profile = "environment"
+        profile = self._resolve_profile(
+            shot_type,
+        )
 
 
-        elif shot_type in [
-            "hero_reveal",
-            "medium_action"
-        ]:
+        shot_context = {
 
-            profile = "motion"
+            "shot_type": shot_type,
 
+            "movement": movement,
 
-        elif shot_type in [
-            "cinematic_close",
-            "close_detail"
-        ]:
+            "profile": profile,
 
-            profile = "detail"
+            "camera": camera,
 
+        }
 
 
         model_result = (
             self.model_router
-            .get_best_model("video")
+            .get_best_model(
+                "video",
+                shot_context=shot_context,
+            )
         )
 
 
@@ -75,19 +71,52 @@ class ShotModelSelector:
 
 
             "camera":
-
                 {
 
                     "shot_type":
                         shot_type,
 
                     "movement":
-                        movement
+                        movement,
 
                 },
 
 
+            "shot_context":
+                shot_context,
+
+
             "selected_model":
-                model_result
+                model_result,
 
         }
+
+
+
+    @staticmethod
+    def _resolve_profile(
+        shot_type,
+    ):
+
+        if shot_type in [
+            "wide_establishing",
+            "epic_space",
+        ]:
+            return "environment"
+
+
+        if shot_type in [
+            "hero_reveal",
+            "medium_action",
+        ]:
+            return "motion"
+
+
+        if shot_type in [
+            "cinematic_close",
+            "close_detail",
+        ]:
+            return "detail"
+
+
+        return "cinematic"
