@@ -1,16 +1,34 @@
 from pathlib import Path
 
 from core.ai_core.ai_director import AIDirector
+from core.ai_core.generation_queue import (
+    GenerationQueue,
+    GenerationTask,
+)
+from core.ai_core.providers.video.video_provider import (
+    VideoProvider,
+)
 from core.movie_engine.scene_builder import SceneBuilder
 
 
 class MoviePipeline:
     """
-    Coordinates AI direction and scene construction.
+    Coordinates AI direction, media generation and timeline creation.
 
-    AIDirector is responsible for creating the cinematic direction.
-    SceneBuilder is responsible for converting the resulting direction
-    into the movie timeline representation.
+    Flow:
+
+    AI Director
+        ->
+    Generation Queue
+        ->
+    Video Provider
+        ->
+    Scene Builder
+        ->
+    Timeline
+
+    The pipeline keeps backward compatibility with:
+        MoviePipeline(project_path)
     """
 
     def __init__(
@@ -18,6 +36,8 @@ class MoviePipeline:
         project_path="projects/test_movie",
         ai_director=None,
         scene_builder=None,
+        generation_queue=None,
+        video_provider=None,
     ):
         self.project_path = Path(project_path)
 
@@ -31,6 +51,16 @@ class MoviePipeline:
         self.scene_builder = (
             scene_builder
             or SceneBuilder()
+        )
+
+        self.generation_queue = (
+            generation_queue
+            or GenerationQueue()
+        )
+
+        self.video_provider = (
+            video_provider
+            or VideoProvider()
         )
 
     def create_scene(
@@ -59,17 +89,24 @@ class MoviePipeline:
                 f"for scene {scene_id}: {director_file}"
             )
 
+        self._queue_shots(
+            scene_id,
+            direction,
+            duration,
+        )
+
+        generated_tasks = (
+            self.generation_queue.process_all()
+        )
+
         generated_assets = []
 
-        for shot in direction.get(
-            "shots",
-            [],
-        ):
+        for task in generated_tasks:
+            if task.status != "done":
+                continue
+
             generated_assets.append(
-                self._build_direction_asset(
-                    scene_id,
-                    shot,
-                )
+                self._task_to_asset(task)
             )
 
         timeline_item = (
@@ -85,6 +122,14 @@ class MoviePipeline:
             "duration": float(duration),
             "director_file": director_file,
             "direction": direction,
+            "generated_tasks": [
+                {
+                    "task_id": task.task_id,
+                    "status": task.status,
+                    "result": task.result,
+                }
+                for task in generated_tasks
+            ],
             "timeline": (
                 self.scene_builder
                 .get_movie_timeline()
@@ -92,58 +137,77 @@ class MoviePipeline:
             "scene": timeline_item,
         }
 
-    @staticmethod
-    def _build_direction_asset(
+    def _queue_shots(
+        self,
         scene_id,
-        shot,
+        direction,
+        duration,
     ):
-        """
-        Convert a director shot into the minimal asset contract
-        expected by SceneBuilder.
+        for shot in direction.get(
+            "shots",
+            [],
+        ):
+            task = GenerationTask(
+                task_type=(
+                    f"shot_{shot.get('shot_id', 0)}"
+                ),
+                prompt=shot.get(
+                    "director_prompt",
+                    "",
+                ),
+                provider=self.video_provider,
+                quality="8k",
+                project_path=self.project_path,
+                metadata={
+                    "scene_id": scene_id,
+                    "shot_id": shot.get(
+                        "shot_id",
+                        0,
+                    ),
+                    "duration": shot.get(
+                        "duration",
+                        duration,
+                    ),
+                    "camera": shot.get(
+                        "camera",
+                        {},
+                    ),
+                    "scene_type": shot.get(
+                        "scene_type",
+                        "cinematic",
+                    ),
+                },
+            )
 
-        This is intentionally an internal adapter. The real media
-        generation providers will be connected later.
-        """
+            self.generation_queue.add_task(
+                task
+            )
 
-        class DirectionAsset:
+    @staticmethod
+    def _task_to_asset(
+        task,
+    ):
+        class GeneratedAsset:
             pass
 
-        class DirectionProvider:
-            name = "ai_director"
+        class Provider:
+            pass
 
-        asset = DirectionAsset()
+        asset = GeneratedAsset()
 
-        asset.task_type = (
-            f"shot_{shot.get('shot_id', 0)}"
+        provider = Provider()
+        provider.name = (
+            task.provider.name
         )
 
-        asset.provider = DirectionProvider()
+        asset.task_type = (
+            task.task_type
+        )
 
-        asset.result = {
-            "scene_id": scene_id,
-            "shot_id": shot.get(
-                "shot_id"
-            ),
-            "start": shot.get(
-                "start",
-                0,
-            ),
-            "duration": shot.get(
-                "duration",
-                0,
-            ),
-            "camera": shot.get(
-                "camera",
-                {},
-            ),
-            "scene_type": shot.get(
-                "scene_type",
-                "cinematic",
-            ),
-            "director_prompt": shot.get(
-                "director_prompt",
-                "",
-            ),
-        }
+        asset.provider = provider
+
+        asset.result = (
+            task.result
+        )
 
         return asset
