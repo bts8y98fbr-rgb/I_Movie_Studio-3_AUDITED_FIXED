@@ -15,52 +15,51 @@ class QualityProfile:
 
 class QualityPolicy:
     """
-    Global production-quality policy.
+    Resolves a user's requested target against real provider capabilities.
 
-    The requested quality is a target, not a reason to stop generation.
-    When a provider cannot satisfy the target, the caller can resolve the
-    highest available capability and notify the user.
+    Default target is Production 4K. 8K is a valid explicit user choice.
+    A provider limitation never stops generation: the highest supported
+    capability at or below the requested target is selected and a notification
+    is returned when fallback was necessary.
     """
 
     def __init__(self, profile: str = "production") -> None:
         self.profiles = {
             "production": QualityProfile(
-                name="Production 4K",
-                resolution="3840x2160",
-                fps=60,
-                hdr=True,
-                color_depth=10,
-                allow_downgrade=True,
-                priority=[
-                    "quality",
-                    "realism",
-                    "cinematic_motion",
-                    "detail",
-                ],
+                "Production 4K",
+                "3840x2160",
+                60,
+                True,
+                10,
+                True,
+                ["quality", "realism", "cinematic_motion", "detail"],
             ),
-            # Backward-compatible alias used by the original project.
-            "cinema_master": QualityProfile(
-                name="Production 4K",
-                resolution="3840x2160",
-                fps=60,
-                hdr=True,
-                color_depth=10,
-                allow_downgrade=True,
-                priority=[
-                    "quality",
-                    "realism",
-                    "cinematic_motion",
-                    "detail",
-                ],
+            "4k": QualityProfile(
+                "Production 4K",
+                "3840x2160",
+                60,
+                True,
+                10,
+                True,
+                ["quality", "realism", "cinematic_motion", "detail"],
+            ),
+            "8k": QualityProfile(
+                "Master 8K",
+                "7680x4320",
+                60,
+                True,
+                10,
+                True,
+                ["quality", "realism", "cinematic_motion", "detail"],
             ),
             "preview": QualityProfile(
-                name="Preview",
-                resolution="1920x1080",
-                fps=30,
-                hdr=False,
-                color_depth=8,
-                allow_downgrade=True,
-                priority=["speed"],
+                "Preview",
+                "1920x1080",
+                30,
+                False,
+                8,
+                True,
+                ["speed"],
             ),
         }
 
@@ -68,12 +67,6 @@ class QualityPolicy:
             raise ValueError(f"Unknown quality profile: {profile}")
 
         self.active_profile = self.profiles[profile]
-
-        self.audio_defaults = {
-            "quality": "high",
-            "channels": 2,
-            "channel_layout": "stereo",
-        }
 
     def get_profile(self) -> dict[str, Any]:
         return {
@@ -83,11 +76,8 @@ class QualityPolicy:
             "hdr": self.active_profile.hdr,
             "color_depth": self.active_profile.color_depth,
             "allow_downgrade": self.active_profile.allow_downgrade,
-            "priority": self.active_profile.priority,
+            "priority": list(self.active_profile.priority),
         }
-
-    def get_audio_defaults(self) -> dict[str, Any]:
-        return dict(self.audio_defaults)
 
     def get_video_defaults(self) -> dict[str, Any]:
         return {
@@ -97,39 +87,12 @@ class QualityPolicy:
             "color_depth": self.active_profile.color_depth,
         }
 
-    def validate_quality(self, requested: dict[str, Any]) -> dict[str, Any]:
-        """
-        Validate a requested quality against the active profile.
-
-        This method remains backward-compatible with the original API:
-        it returns ``approved`` or ``rejected`` plus an error list.
-
-        New routing code should use ``resolve_quality`` so that an unsupported
-        capability can fall back instead of stopping the generation.
-        """
-
-        required = self.active_profile
-        errors: list[str] = []
-
-        if requested.get("resolution") != required.resolution:
-            if not required.allow_downgrade:
-                errors.append("Resolution downgrade forbidden")
-
-        if requested.get("fps", 0) < required.fps:
-            if not required.allow_downgrade:
-                errors.append("FPS downgrade forbidden")
-
-        if required.hdr and not requested.get("hdr", False):
-            if not required.allow_downgrade:
-                errors.append("HDR required")
-
-        if requested.get("color_depth", required.color_depth) < required.color_depth:
-            if not required.allow_downgrade:
-                errors.append("Color depth downgrade forbidden")
-
+    def get_audio_defaults(self) -> dict[str, Any]:
         return {
-            "status": "approved" if not errors else "rejected",
-            "errors": errors,
+            "format": "stereo",
+            "channels": 2,
+            "channel_layout": "stereo",
+            "quality": "high",
         }
 
     def resolve_quality(
@@ -137,110 +100,179 @@ class QualityPolicy:
         capabilities: dict[str, Any],
         requested: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """
-        Resolve the highest quality available from a provider.
-
-        Generation is never rejected merely because a provider cannot deliver
-        the requested production target. The returned notification explains
-        any fallback.
-        """
-
-        target = requested or self.get_video_defaults()
-
-        resolutions = capabilities.get("resolutions", [])
-        fps_values = capabilities.get("fps", [])
-        hdr_values = capabilities.get("hdr", [])
-        color_depth_values = capabilities.get("color_depth", [])
-
-        actual_resolution = self._highest_resolution(
-            target.get("resolution"),
-            resolutions,
-        )
-        actual_fps = self._highest_not_exceeding_or_highest(
-            target.get("fps"),
-            fps_values,
-            default=target.get("fps", 60),
-        )
-        actual_hdr = self._resolve_bool_capability(
-            target.get("hdr", True),
-            hdr_values,
-        )
-        actual_color_depth = self._highest_not_exceeding_or_highest(
-            target.get("color_depth", 10),
-            color_depth_values,
-            default=target.get("color_depth", 10),
-        )
+        target = dict(requested or self.get_video_defaults())
 
         actual = {
-            "resolution": actual_resolution,
-            "fps": actual_fps,
-            "hdr": actual_hdr,
-            "color_depth": actual_color_depth,
+            "resolution": self._highest_resolution(
+                target.get("resolution"),
+                capabilities.get("resolutions", []),
+            ),
+            "fps": self._highest_not_exceeding_or_highest(
+                target.get("fps", 60),
+                capabilities.get("fps", []),
+                target.get("fps", 60),
+            ),
+            "hdr": self._resolve_bool_capability(
+                target.get("hdr", True),
+                capabilities.get("hdr", []),
+            ),
+            "color_depth": self._highest_not_exceeding_or_highest(
+                target.get("color_depth", 10),
+                capabilities.get("color_depth", []),
+                target.get("color_depth", 10),
+            ),
         }
 
         fallback = actual != target
 
         return {
             "status": "fallback" if fallback else "approved",
-            "requested_quality": dict(target),
+            "requested_quality": target,
             "actual_quality": actual,
             "fallback_applied": fallback,
             "notification": (
-                "Requested quality was not fully available. "
-                "Generation will continue using the highest available capability."
+                "Requested video quality is not fully supported by the "
+                "selected provider. Generation will continue using the "
+                "highest supported quality."
+                if fallback
+                else None
+            ),
+        }
+
+    def resolve_audio(
+        self,
+        capabilities: dict[str, Any],
+        requested: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Resolve audio without exceeding the system ceiling of DTS 9.1.
+
+        Supported system order:
+        stereo < 5.1 < 7.1 < dts_9.1
+        """
+
+        target = dict(requested or self.get_audio_defaults())
+
+        formats = [
+            str(value).lower()
+            for value in capabilities.get("formats", [])
+        ]
+
+        if not formats:
+            formats = ["stereo"]
+
+        system_order = ["stereo", "5.1", "7.1", "dts_9.1"]
+        ceiling = "dts_9.1"
+
+        requested_format = str(
+            target.get("format", "stereo")
+        ).lower()
+
+        if requested_format not in system_order:
+            requested_format = "stereo"
+
+        requested_rank = min(
+            system_order.index(requested_format),
+            system_order.index(ceiling),
+        )
+
+        supported = [
+            fmt
+            for fmt in formats
+            if fmt in system_order
+            and system_order.index(fmt) <= requested_rank
+        ]
+
+        actual_format = (
+            max(supported, key=system_order.index)
+            if supported
+            else "stereo"
+        )
+
+        channel_map = {
+            "stereo": 2,
+            "5.1": 6,
+            "7.1": 8,
+            "dts_9.1": 10,
+        }
+
+        actual = {
+            "format": actual_format,
+            "channels": channel_map[actual_format],
+            "channel_layout": actual_format,
+            "quality": str(
+                target.get("quality", "high")
+            ).lower(),
+        }
+
+        fallback = (
+            actual_format
+            != str(target.get("format", "stereo")).lower()
+            or int(
+                target.get(
+                    "channels",
+                    channel_map[requested_format],
+                )
+            ) != actual["channels"]
+        )
+
+        return {
+            "status": "fallback" if fallback else "approved",
+            "requested_audio": target,
+            "actual_audio": actual,
+            "fallback_applied": fallback,
+            "notification": (
+                "Requested audio format is not fully supported by the "
+                "selected provider. Generation will continue using the "
+                "highest supported format up to DTS 9.1."
                 if fallback
                 else None
             ),
         }
 
     @staticmethod
-    def _highest_resolution(
-        requested: str | None,
-        available: list[str],
-    ) -> str | None:
+    def _highest_resolution(requested, available):
         if not available:
             return requested
 
-        def pixels(value: str) -> int:
+        def pixels(value):
             try:
-                width, height = value.lower().split("x")
+                width, height = str(value).lower().split("x")
                 return int(width) * int(height)
-            except (ValueError, AttributeError):
+            except (ValueError, TypeError):
                 return 0
 
-        requested_pixels = pixels(requested) if requested else 0
+        requested_pixels = pixels(requested)
 
         lower_or_equal = [
-            value for value in available
-            if pixels(value) <= requested_pixels and pixels(value) > 0
+            value
+            for value in available
+            if 0 < pixels(value) <= requested_pixels
         ]
 
-        if lower_or_equal:
-            return max(lower_or_equal, key=pixels)
-
-        return max(available, key=pixels)
+        return (
+            max(lower_or_equal, key=pixels)
+            if lower_or_equal
+            else max(available, key=pixels)
+        )
 
     @staticmethod
     def _highest_not_exceeding_or_highest(
-        requested: int,
-        available: list[int],
-        default: int,
-    ) -> int:
+        requested,
+        available,
+        default,
+    ):
         if not available:
             return default
 
         lower_or_equal = [
-            value for value in available
-            if value <= requested
+            value for value in available if value <= requested
         ]
 
         return max(lower_or_equal or available)
 
     @staticmethod
-    def _resolve_bool_capability(
-        requested: bool,
-        available: list[bool],
-    ) -> bool:
+    def _resolve_bool_capability(requested, available):
         if not available:
             return requested
 

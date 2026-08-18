@@ -23,14 +23,10 @@ class ExportEngine:
             return path
         if path.exists():
             return path
-        candidate = self.project_path / path
-        if candidate.exists():
-            return candidate
-        return candidate
+        return self.project_path / path
 
     def validate_movie(self, movie):
         errors = []
-
         assets = movie.get("assets", [])
         renders = movie.get("renders", [])
 
@@ -54,25 +50,36 @@ class ExportEngine:
             if not asset_file:
                 errors.append(f"Asset {asset_id} missing file")
             elif not self._resolve_file(asset_file).is_file():
-                errors.append(f"Asset {asset_id} file not found: {asset_file}")
+                errors.append(
+                    f"Asset {asset_id} file not found: {asset_file}"
+                )
 
         timeline = sorted(
             movie.get("timeline", []),
-            key=lambda item: (item.get("start", 0), item.get("shot_id", 0)),
+            key=lambda item: (
+                item.get("start", 0),
+                item.get("shot_id", 0),
+            ),
         )
+
         last_end = 0
         for item in timeline:
             start = item.get("start", 0)
             duration = item.get("duration", 0)
             if duration <= 0:
-                errors.append(f"Invalid duration at shot {item.get('shot_id')}")
+                errors.append(
+                    f"Invalid duration at shot {item.get('shot_id')}"
+                )
             if start < last_end:
-                errors.append(f"Timeline overlap at shot {item.get('shot_id')}")
+                errors.append(
+                    f"Timeline overlap at shot {item.get('shot_id')}"
+                )
             last_end = max(last_end, start + duration)
 
         if len(timeline) != len(assets):
             errors.append(
-                f"Timeline/assets count mismatch: {len(timeline)} timeline items, {len(assets)} assets"
+                f"Timeline/assets count mismatch: {len(timeline)} "
+                f"timeline items, {len(assets)} assets"
             )
 
         return errors
@@ -84,7 +91,16 @@ class ExportEngine:
         export_plan = {
             "created": datetime.now().isoformat(),
             "project": str(self.project_path),
-            "quality": movie.get("quality"),
+            "quality": movie.get("quality", "Production 4K"),
+            "resolution": movie.get("resolution", "3840x2160"),
+            "fps": movie.get("fps", 60),
+            "hdr": movie.get("hdr", True),
+            "color_depth": movie.get("color_depth", 10),
+            "audio": movie.get("audio", {
+                "format": "stereo",
+                "channels": 2,
+                "channel_layout": "stereo",
+            }),
             "timeline": movie.get("timeline", []),
             "assets": movie.get("assets", []),
             "renders": movie.get("renders", []),
@@ -95,9 +111,15 @@ class ExportEngine:
             "export": {
                 "format": "mp4",
                 "codec": "h265",
-                "resolution": "7680x4320",
-                "fps": 60,
-                "hdr": True,
+                "resolution": movie.get("resolution", "3840x2160"),
+                "fps": movie.get("fps", 60),
+                "hdr": movie.get("hdr", True),
+                "color_depth": movie.get("color_depth", 10),
+                "audio": movie.get("audio", {
+                    "format": "stereo",
+                    "channels": 2,
+                    "channel_layout": "stereo",
+                }),
             },
         }
 

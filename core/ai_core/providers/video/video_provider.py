@@ -16,7 +16,6 @@ class VideoProvider(BaseAIProvider):
     def __init__(self, name="Video AI"):
         super().__init__(name)
 
-
     def capabilities(self):
         return {
             "media_types": ["video"],
@@ -46,9 +45,7 @@ class VideoProvider(BaseAIProvider):
             "implementation": "deterministic_manifest_adapter",
         }
 
-
     def generate(self, prompt, **kwargs):
-
         project_path = Path(
             kwargs.get("project_path")
             or "projects/test_movie"
@@ -64,7 +61,6 @@ class VideoProvider(BaseAIProvider):
             {},
         )
 
-
         if (
             "scene_id" not in metadata
             or "shot_id" not in metadata
@@ -73,9 +69,7 @@ class VideoProvider(BaseAIProvider):
                 "Video generation requires scene_id and shot_id metadata"
             )
 
-
         try:
-
             scene_id = int(
                 metadata["scene_id"]
             )
@@ -84,28 +78,22 @@ class VideoProvider(BaseAIProvider):
                 metadata["shot_id"]
             )
 
-
         except (
             TypeError,
             ValueError,
         ) as exc:
-
             raise ValueError(
                 "scene_id and shot_id must be integers"
             ) from exc
-
-
 
         if scene_id < 0 or shot_id < 0:
             raise ValueError(
                 "scene_id and shot_id must be non-negative"
             )
 
-
         quality_settings = metadata.get(
             "quality"
         )
-
 
         if not isinstance(
             quality_settings,
@@ -113,12 +101,9 @@ class VideoProvider(BaseAIProvider):
         ):
             quality_settings = {}
 
-
-
         asset_id = str(
             uuid.uuid4()
         )[:8]
-
 
         asset_path = (
             project_path
@@ -128,18 +113,15 @@ class VideoProvider(BaseAIProvider):
             / f"shot_{shot_id:03d}"
         )
 
-
         asset_path.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-
         asset_file = (
             asset_path
             / f"{asset_id}.json"
         )
-
 
         selected_model = {}
 
@@ -149,80 +131,53 @@ class VideoProvider(BaseAIProvider):
         ):
             selected_model = model
 
-
         result = {
-
             "asset_id": asset_id,
-
             "type": "video",
-
             "provider": self.name,
-
             "model": selected_model,
-
             "prompt": prompt,
-
             "status": "generated",
-
             "asset_path": str(asset_path),
-
             "asset_file": str(asset_file),
-
             "created": datetime.now().isoformat(),
-
-
             "metadata": {
-
                 "scene_id": scene_id,
-
                 "shot_id": shot_id,
-
                 "duration": metadata.get(
                     "duration"
                 ),
-
                 "fps": quality_settings.get(
                     "fps",
                     60,
                 ),
-
                 "resolution": quality_settings.get(
                     "resolution",
                     "7680x4320",
                 ),
-
                 "hdr": quality_settings.get(
                     "hdr",
                     True,
                 ),
-
                 "color_depth": quality_settings.get(
                     "color_depth",
                     10,
                 ),
-
                 "timeline": metadata.get(
                     "timeline",
                     {},
                 ),
-
                 "camera": metadata.get(
                     "camera",
                     {},
                 ),
-
                 "shot_model_selection": metadata.get(
                     "shot_model_selection",
                     {},
                 ),
-
                 "selected_model": selected_model,
-
             },
-
         }
-
-
 
         asset_file.write_text(
             json.dumps(
@@ -232,6 +187,5 @@ class VideoProvider(BaseAIProvider):
             ),
             encoding="utf-8",
         )
-
 
         return result

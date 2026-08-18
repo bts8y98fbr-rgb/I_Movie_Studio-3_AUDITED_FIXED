@@ -8,50 +8,53 @@ from core.ai_core.quality_policy import QualityPolicy
 
 
 class GenerationEngine:
-    def __init__(self, project_path="projects/test_movie", quality="8k"):
+    def __init__(self, project_path="projects/test_movie", quality="4k"):
         self.project_path = Path(project_path)
         self.quality = quality
         self.provider_manager = ProviderManager()
         self.provider_manager.load_default_providers()
-        self.quality_policy = QualityPolicy()
+        self.quality_policy = QualityPolicy(quality)
         self.queue = GenerationQueue()
 
     def generate_scene(self, scene_id):
         render_plan_path = (
-            self.project_path
-            / "render"
+            self.project_path / "render"
             / f"scene_{scene_id:03d}"
             / "render_plan.json"
         )
-
         if not render_plan_path.exists():
             raise FileNotFoundError(render_plan_path)
 
-        render_plan = json.loads(render_plan_path.read_text(encoding="utf-8"))
+        render_plan = json.loads(
+            render_plan_path.read_text(encoding="utf-8")
+        )
         video_provider = self.provider_manager.get("Video AI")
         if video_provider is None:
             raise RuntimeError("Video AI provider not found")
 
         self.queue = GenerationQueue()
-        shots = render_plan.get("shots", [])
 
-        for shot in shots:
+        for shot in render_plan.get("shots", []):
             shot_id = shot.get("shot_id")
             if shot_id is None:
                 raise ValueError("Render plan shot is missing shot_id")
 
             requested_quality = dict(
-                shot.get(
-                    "quality",
-                    render_plan.get("render_settings", {}),
-                )
-                or {}
+                shot.get("quality")
+                or render_plan.get("render_settings")
+                or self.quality_policy.get_video_defaults()
             )
 
-            if not requested_quality:
-                requested_quality = self.quality_policy.get_video_defaults()
+            # Render presets use "name"; QualityPolicy works with the
+            # capability fields only.
+            requested_quality = {
+                "resolution": requested_quality.get("resolution"),
+                "fps": requested_quality.get("fps", 60),
+                "hdr": requested_quality.get("hdr", True),
+                "color_depth": requested_quality.get("color_depth", 10),
+            }
 
-            resolved_quality = self.quality_policy.resolve_quality(
+            resolved = self.quality_policy.resolve_quality(
                 capabilities=video_provider.capabilities(),
                 requested=requested_quality,
             )
@@ -62,14 +65,13 @@ class GenerationEngine:
                 "timeline": shot.get("timeline", {}),
                 "duration": shot.get("timeline", {}).get("duration"),
                 "camera": shot.get("camera", {}),
-                "quality": resolved_quality["actual_quality"],
-                "requested_quality": resolved_quality["requested_quality"],
-                "actual_quality": resolved_quality["actual_quality"],
-                "fallback_applied": resolved_quality["fallback_applied"],
-                "quality_notification": resolved_quality["notification"],
+                "quality": resolved["actual_quality"],
+                "requested_quality": resolved["requested_quality"],
+                "actual_quality": resolved["actual_quality"],
+                "fallback_applied": resolved["fallback_applied"],
+                "quality_notification": resolved["notification"],
                 "shot_model_selection": shot.get(
-                    "shot_model_selection",
-                    {},
+                    "shot_model_selection", {}
                 ),
             }
 
@@ -86,19 +88,32 @@ class GenerationEngine:
         results = self.queue.process_all()
         failed = sum(1 for task in results if task.status == "failed")
 
+        actual_qualities = [
+            task.metadata.get("actual_quality")
+            for task in results
+            if task.metadata.get("actual_quality")
+        ]
+
         output = {
             "scene_id": scene_id,
             "created": datetime.now().isoformat(),
             "quality": self.quality,
-            "generated": sum(1 for task in results if task.status == "done"),
+            "requested_quality": self.quality_policy.get_video_defaults(),
+            "actual_quality": actual_qualities[0] if actual_qualities else None,
+            "generated": sum(
+                1 for task in results if task.status == "done"
+            ),
             "failed": failed,
-            "status": "completed" if failed == 0 else "completed_with_errors",
+            "status": (
+                "completed"
+                if failed == 0
+                else "completed_with_errors"
+            ),
             "tasks": self.queue.get_status(),
         }
 
         output_path = (
-            self.project_path
-            / "render_output"
+            self.project_path / "render_output"
             / f"scene_{scene_id:03d}"
             / "generation_result.json"
         )
@@ -111,8 +126,7 @@ class GenerationEngine:
 
     def load_result(self, scene_id):
         file = (
-            self.project_path
-            / "render_output"
+            self.project_path / "render_output"
             / f"scene_{scene_id:03d}"
             / "generation_result.json"
         )
