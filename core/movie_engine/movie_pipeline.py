@@ -1,34 +1,38 @@
 from pathlib import Path
 
 from core.ai_core.ai_director import AIDirector
+
 from core.ai_core.generation_queue import (
     GenerationQueue,
     GenerationTask,
 )
-from core.ai_core.providers.video.video_provider import (
-    VideoProvider,
+
+from core.ai_core.providers.video import (
+    RemoteVideoProvider,
+    VideoRouter,
 )
+
 from core.movie_engine.scene_builder import SceneBuilder
 
 
 class MoviePipeline:
     """
-    Coordinates AI direction, media generation and timeline creation.
+    Coordinates:
 
-    Flow:
+        AI Director
+            ->
+        Generation Queue
+            ->
+        Video Router
+            ->
+        Remote Video AI Provider
+            ->
+        Scene Builder
+            ->
+        Timeline
 
-    AI Director
-        ->
-    Generation Queue
-        ->
-    Video Provider
-        ->
-    Scene Builder
-        ->
-    Timeline
-
-    The pipeline keeps backward compatibility with:
-        MoviePipeline(project_path)
+    Local machine manages workflow.
+    Video generation happens remotely.
     """
 
     def __init__(
@@ -37,8 +41,9 @@ class MoviePipeline:
         ai_director=None,
         scene_builder=None,
         generation_queue=None,
-        video_provider=None,
+        video_router=None,
     ):
+
         self.project_path = Path(project_path)
 
         self.ai_director = (
@@ -58,10 +63,15 @@ class MoviePipeline:
             or GenerationQueue()
         )
 
-        self.video_provider = (
-            video_provider
-            or VideoProvider()
+        self.video_router = (
+            video_router
+            or VideoRouter(
+                [
+                    RemoteVideoProvider()
+                ]
+            )
         )
+
 
     def create_scene(
         self,
@@ -69,6 +79,7 @@ class MoviePipeline:
         scene_data,
         duration=5,
     ):
+
         director_file = (
             self.ai_director.analyze_scene(
                 scene_id,
@@ -85,77 +96,30 @@ class MoviePipeline:
 
         if direction is None:
             raise RuntimeError(
-                "AI Director produced no direction "
+                f"AI Director produced no direction "
                 f"for scene {scene_id}: {director_file}"
             )
 
-        self._queue_shots(
-            scene_id,
-            direction,
-            duration,
+
+        provider = (
+            self.video_router.select()
         )
 
-        generated_tasks = (
-            self.generation_queue.process_all()
-        )
 
-        generated_assets = []
-
-        for task in generated_tasks:
-            if task.status != "done":
-                continue
-
-            generated_assets.append(
-                self._task_to_asset(task)
-            )
-
-        timeline_item = (
-            self.scene_builder.build_scene(
-                scene_id,
-                duration,
-                generated_assets,
-            )
-        )
-
-        return {
-            "scene_id": scene_id,
-            "duration": float(duration),
-            "director_file": director_file,
-            "direction": direction,
-            "generated_tasks": [
-                {
-                    "task_id": task.task_id,
-                    "status": task.status,
-                    "result": task.result,
-                }
-                for task in generated_tasks
-            ],
-            "timeline": (
-                self.scene_builder
-                .get_movie_timeline()
-            ),
-            "scene": timeline_item,
-        }
-
-    def _queue_shots(
-        self,
-        scene_id,
-        direction,
-        duration,
-    ):
         for shot in direction.get(
             "shots",
             [],
         ):
+
             task = GenerationTask(
                 task_type=(
-                    f"shot_{shot.get('shot_id', 0)}"
+                    f"shot_{shot.get('shot_id',0)}"
                 ),
                 prompt=shot.get(
                     "director_prompt",
                     "",
                 ),
-                provider=self.video_provider,
+                provider=provider,
                 quality="8k",
                 project_path=self.project_path,
                 metadata={
@@ -183,19 +147,70 @@ class MoviePipeline:
                 task
             )
 
+
+        generated_tasks = (
+            self.generation_queue.process_all()
+        )
+
+
+        generated_assets = []
+
+        for task in generated_tasks:
+
+            if task.status != "done":
+                continue
+
+            generated_assets.append(
+                self._task_to_asset(
+                    task
+                )
+            )
+
+
+        timeline_item = (
+            self.scene_builder.build_scene(
+                scene_id,
+                duration,
+                generated_assets,
+            )
+        )
+
+
+        return {
+            "scene_id": scene_id,
+            "duration": float(duration),
+            "director_file": director_file,
+            "direction": direction,
+            "provider": provider.name,
+            "generated_tasks": [
+                {
+                    "task_id": task.task_id,
+                    "status": task.status,
+                    "result": task.result,
+                }
+                for task in generated_tasks
+            ],
+            "timeline": (
+                self.scene_builder
+                .get_movie_timeline()
+            ),
+            "scene": timeline_item,
+        }
+
+
     @staticmethod
-    def _task_to_asset(
-        task,
-    ):
+    def _task_to_asset(task):
+
         class GeneratedAsset:
             pass
 
         class Provider:
             pass
 
-        asset = GeneratedAsset()
 
+        asset = GeneratedAsset()
         provider = Provider()
+
         provider.name = (
             task.provider.name
         )
