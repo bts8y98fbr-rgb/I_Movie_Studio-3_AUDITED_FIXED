@@ -8,8 +8,8 @@ from core.ai_core.generation_queue import (
 )
 
 from core.ai_core.providers.video import (
-    RemoteVideoProvider,
     VideoRouter,
+    RemoteVideoProvider,
 )
 
 from core.movie_engine.scene_builder import SceneBuilder
@@ -17,22 +17,22 @@ from core.movie_engine.scene_builder import SceneBuilder
 
 class MoviePipeline:
     """
-    Coordinates:
+    Coordinates AI direction, remote video generation
+    and timeline creation.
 
-        AI Director
-            ->
-        Generation Queue
-            ->
-        Video Router
-            ->
-        Remote Video AI Provider
-            ->
-        Scene Builder
-            ->
-        Timeline
+    Flow:
 
-    Local machine manages workflow.
-    Video generation happens remotely.
+    AI Director
+        ->
+    Generation Queue
+        ->
+    Video Router
+        ->
+    Remote Video Provider
+        ->
+    Scene Builder
+        ->
+    Timeline
     """
 
     def __init__(
@@ -41,16 +41,14 @@ class MoviePipeline:
         ai_director=None,
         scene_builder=None,
         generation_queue=None,
-        video_router=None,
+        video_provider=None,
     ):
 
         self.project_path = Path(project_path)
 
         self.ai_director = (
             ai_director
-            or AIDirector(
-                self.project_path
-            )
+            or AIDirector(self.project_path)
         )
 
         self.scene_builder = (
@@ -63,13 +61,17 @@ class MoviePipeline:
             or GenerationQueue()
         )
 
-        self.video_router = (
-            video_router
-            or VideoRouter(
+        if video_provider:
+            self.video_router = video_provider
+        else:
+            self.video_router = VideoRouter(
                 [
                     RemoteVideoProvider()
                 ]
             )
+
+        self.video_provider = (
+            self.video_router.select()
         )
 
 
@@ -96,76 +98,28 @@ class MoviePipeline:
 
         if direction is None:
             raise RuntimeError(
-                f"AI Director produced no direction "
-                f"for scene {scene_id}: {director_file}"
+                f"No AI direction for scene {scene_id}"
             )
 
-
-        provider = (
-            self.video_router.select()
+        self._queue_shots(
+            scene_id,
+            direction,
+            duration,
         )
-
-
-        for shot in direction.get(
-            "shots",
-            [],
-        ):
-
-            task = GenerationTask(
-                task_type=(
-                    f"shot_{shot.get('shot_id',0)}"
-                ),
-                prompt=shot.get(
-                    "director_prompt",
-                    "",
-                ),
-                provider=provider,
-                quality="8k",
-                project_path=self.project_path,
-                metadata={
-                    "scene_id": scene_id,
-                    "shot_id": shot.get(
-                        "shot_id",
-                        0,
-                    ),
-                    "duration": shot.get(
-                        "duration",
-                        duration,
-                    ),
-                    "camera": shot.get(
-                        "camera",
-                        {},
-                    ),
-                    "scene_type": shot.get(
-                        "scene_type",
-                        "cinematic",
-                    ),
-                },
-            )
-
-            self.generation_queue.add_task(
-                task
-            )
-
 
         generated_tasks = (
             self.generation_queue.process_all()
         )
 
-
         generated_assets = []
 
         for task in generated_tasks:
-
             if task.status != "done":
                 continue
 
             generated_assets.append(
-                self._task_to_asset(
-                    task
-                )
+                self._task_to_asset(task)
             )
-
 
         timeline_item = (
             self.scene_builder.build_scene(
@@ -175,13 +129,11 @@ class MoviePipeline:
             )
         )
 
-
         return {
             "scene_id": scene_id,
             "duration": float(duration),
             "director_file": director_file,
             "direction": direction,
-            "provider": provider.name,
             "generated_tasks": [
                 {
                     "task_id": task.task_id,
@@ -191,11 +143,58 @@ class MoviePipeline:
                 for task in generated_tasks
             ],
             "timeline": (
-                self.scene_builder
-                .get_movie_timeline()
+                self.scene_builder.get_movie_timeline()
             ),
             "scene": timeline_item,
         }
+
+
+    def _queue_shots(
+        self,
+        scene_id,
+        direction,
+        duration,
+    ):
+
+        for shot in direction.get("shots", []):
+
+            task = GenerationTask(
+                task_type=(
+                    f"shot_{shot.get('shot_id', 0)}"
+                ),
+
+                prompt=shot.get(
+                    "director_prompt",
+                    "",
+                ),
+
+                provider=self.video_provider,
+
+                quality="8k",
+
+                project_path=self.project_path,
+
+                metadata={
+                    "scene_id": scene_id,
+
+                    "shot_id": shot.get(
+                        "shot_id",
+                        0,
+                    ),
+
+                    "duration": shot.get(
+                        "duration",
+                        duration,
+                    ),
+
+                    "camera": shot.get(
+                        "camera",
+                        {},
+                    ),
+                },
+            )
+
+            self.generation_queue.add_task(task)
 
 
     @staticmethod
@@ -207,22 +206,16 @@ class MoviePipeline:
         class Provider:
             pass
 
-
         asset = GeneratedAsset()
+
         provider = Provider()
 
-        provider.name = (
-            task.provider.name
-        )
+        provider.name = task.provider.name
 
-        asset.task_type = (
-            task.task_type
-        )
+        asset.task_type = task.task_type
 
         asset.provider = provider
 
-        asset.result = (
-            task.result
-        )
+        asset.result = task.result
 
         return asset
