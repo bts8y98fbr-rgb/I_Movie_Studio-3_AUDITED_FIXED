@@ -1,35 +1,40 @@
-from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List
 
+from core.ai_core.providers.capabilities.provider_capability import (
+    ProviderCapability,
+)
 
-@dataclass
-class ProviderCapability:
-    name: str
-    media_type: str
-    qualities: List[str] = field(default_factory=list)
-    max_parallel_jobs: int = 1
-    priority: int = 0
+from core.ai_core.providers.capabilities.capability_matcher import (
+    CapabilityMatcher,
+)
 
 
 class ProviderPool:
     """
     Dynamic AI provider pool.
 
-    Manages multiple external AI providers.
+    Responsibilities:
 
-    Providers are selected by:
-        - media type
-        - quality requirements
-        - priority
-        - available capacity
+    - register AI providers
+    - store provider capabilities
+    - select best provider by requirements
+    - support parallel provider execution
     """
 
     def __init__(
         self,
         providers=None,
     ):
+
         self.providers = providers or []
-        self.capabilities = []
+
+        self.capabilities: List[
+            ProviderCapability
+        ] = []
+
+        self.matcher = CapabilityMatcher(
+            self.capabilities
+        )
 
         self._load_capabilities()
 
@@ -39,9 +44,13 @@ class ProviderPool:
         provider,
         capability=None,
     ):
-        self.providers.append(provider)
+
+        self.providers.append(
+            provider
+        )
 
         if capability:
+
             self.capabilities.append(
                 capability
             )
@@ -51,36 +60,89 @@ class ProviderPool:
 
         for provider in self.providers:
 
-            capability = getattr(
+            provider_capability = getattr(
+                provider,
+                "provider_capability",
+                None,
+            )
+
+            if provider_capability:
+
+                self.capabilities.append(
+                    provider_capability
+                )
+
+                continue
+
+
+            legacy = getattr(
                 provider,
                 "capabilities",
                 None,
             )
 
-            if callable(capability):
 
-                data = capability()
+            if callable(legacy):
 
-                self.capabilities.append(
-                    ProviderCapability(
-                        name=provider.name,
-                        media_type=data.get(
-                            "media_types",
-                            ["unknown"]
-                        )[0],
-                        qualities=data.get(
-                            "qualities",
-                            []
+                data = legacy()
+
+                capability = ProviderCapability(
+
+                    provider_name=
+                        provider.name,
+
+                    media_type=
+                        data.get(
+                            "media_type",
+                            "video",
                         ),
-                        max_parallel_jobs=data.get(
+
+                    supported_qualities=
+                        data.get(
+                            "qualities",
+                            [],
+                        ),
+
+                    max_duration_seconds=
+                        data.get(
+                            "max_duration_seconds",
+                            0,
+                        ),
+
+                    supports_hdr=
+                        data.get(
+                            "supports_hdr",
+                            False,
+                        ),
+
+                    max_parallel_jobs=
+                        data.get(
                             "max_parallel_jobs",
                             1,
                         ),
-                        priority=data.get(
-                            "priority",
-                            0,
+
+                    speed_score=
+                        data.get(
+                            "speed_score",
+                            50,
                         ),
-                    )
+
+                    quality_score=
+                        data.get(
+                            "quality_score",
+                            50,
+                        ),
+
+                    reliability_score=
+                        data.get(
+                            "reliability_score",
+                            50,
+                        ),
+                )
+
+
+                self.capabilities.append(
+                    capability
                 )
 
 
@@ -88,35 +150,57 @@ class ProviderPool:
         self,
         media_type="video",
         quality=None,
+        duration=0,
+        hdr=False,
+        style=None,
     ):
 
-        candidates = []
+        if self.capabilities:
 
-        for provider in self.providers:
-
-            if not hasattr(
-                provider,
-                "name",
-            ):
-                continue
-
-            candidates.append(
-                provider
+            selected = (
+                self.matcher.find_best(
+                    media_type=media_type,
+                    quality=quality,
+                    duration=duration,
+                    hdr=hdr,
+                    style=style,
+                )
             )
 
+            if selected:
 
-        if not candidates:
+                for provider in self.providers:
+
+                    if (
+                        provider.name
+                        ==
+                        selected.provider_name
+                    ):
+                        return provider
+
+
+        available = [
+
+            provider
+
+            for provider in self.providers
+
+            if hasattr(
+                provider,
+                "name",
+            )
+
+        ]
+
+
+        if not available:
 
             raise RuntimeError(
                 "No providers available"
             )
 
 
-        return sorted(
-            candidates,
-            key=lambda item:
-                item.name
-        )[0]
+        return available[0]
 
 
     def select_many(
@@ -126,29 +210,25 @@ class ProviderPool:
         quality=None,
     ):
 
-        providers = self.providers[:]
-
-        if len(providers) <= count:
-
-            return providers
-
-
-        return providers[:count]
+        return self.providers[:count]
 
 
     def status(self):
 
         return {
 
-            "providers": [
-                provider.name
-                for provider in self.providers
-            ],
+            "providers":
+                [
+                    provider.name
+                    for provider in self.providers
+                ],
 
             "count":
                 len(self.providers),
 
+            "capabilities":
+                len(self.capabilities),
+
             "parallel_ready":
                 len(self.providers) >= 10,
-
         }
