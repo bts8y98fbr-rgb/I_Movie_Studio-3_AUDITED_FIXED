@@ -221,7 +221,7 @@ class MoviePipeline:
                 provider=
                     self.video_provider,
 
-                quality="8k",
+                quality=None,
 
                 project_path=
                     self.project_path,
