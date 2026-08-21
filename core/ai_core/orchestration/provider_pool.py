@@ -8,6 +8,10 @@ from core.ai_core.providers.capabilities.capability_matcher import (
     CapabilityMatcher,
 )
 
+from core.ai_core.providers.registry.provider_registry import (
+    ProviderRegistry,
+)
+
 
 class ProviderPool:
     """
@@ -16,27 +20,56 @@ class ProviderPool:
     Responsibilities:
 
     - register AI providers
+    - connect with ProviderRegistry
     - store provider capabilities
-    - select best provider by requirements
-    - support parallel provider execution
+    - select best provider
+    - support parallel execution
     """
 
     def __init__(
         self,
         providers=None,
+        registry: ProviderRegistry = None,
     ):
 
-        self.providers = providers or []
+        self.registry = registry
+
+        if registry:
+
+            self.providers = registry.all()
+
+        else:
+
+            self.providers = providers or []
+
 
         self.capabilities: List[
             ProviderCapability
         ] = []
 
+
         self.matcher = CapabilityMatcher(
             self.capabilities
         )
 
+
         self._load_capabilities()
+
+
+
+    def attach_registry(
+        self,
+        registry: ProviderRegistry,
+    ):
+
+        self.registry = registry
+
+        self.providers = registry.all()
+
+        self.capabilities.clear()
+
+        self._load_capabilities()
+
 
 
     def add_provider(
@@ -49,6 +82,13 @@ class ProviderPool:
             provider
         )
 
+        if self.registry:
+
+            self.registry.register(
+                provider
+            )
+
+
         if capability:
 
             self.capabilities.append(
@@ -56,15 +96,18 @@ class ProviderPool:
             )
 
 
+
     def _load_capabilities(self):
 
         for provider in self.providers:
+
 
             provider_capability = getattr(
                 provider,
                 "provider_capability",
                 None,
             )
+
 
             if provider_capability:
 
@@ -73,6 +116,7 @@ class ProviderPool:
                 )
 
                 continue
+
 
 
             legacy = getattr(
@@ -86,64 +130,57 @@ class ProviderPool:
 
                 data = legacy()
 
+
                 capability = ProviderCapability(
 
-                    provider_name=
-                        provider.name,
+                    provider_name=provider.name,
 
-                    media_type=
-                        data.get(
-                            "media_type",
-                            "video",
-                        ),
+                    media_type=data.get(
+                        "media_type",
+                        "video",
+                    ),
 
-                    supported_qualities=
-                        data.get(
-                            "qualities",
-                            [],
-                        ),
+                    supported_qualities=data.get(
+                        "qualities",
+                        [],
+                    ),
 
-                    max_duration_seconds=
-                        data.get(
-                            "max_duration_seconds",
-                            0,
-                        ),
+                    max_duration_seconds=data.get(
+                        "max_duration_seconds",
+                        0,
+                    ),
 
-                    supports_hdr=
-                        data.get(
-                            "supports_hdr",
-                            False,
-                        ),
+                    supports_hdr=data.get(
+                        "supports_hdr",
+                        False,
+                    ),
 
-                    max_parallel_jobs=
-                        data.get(
-                            "max_parallel_jobs",
-                            1,
-                        ),
+                    max_parallel_jobs=data.get(
+                        "max_parallel_jobs",
+                        1,
+                    ),
 
-                    speed_score=
-                        data.get(
-                            "speed_score",
-                            50,
-                        ),
+                    speed_score=data.get(
+                        "speed_score",
+                        50,
+                    ),
 
-                    quality_score=
-                        data.get(
-                            "quality_score",
-                            50,
-                        ),
+                    quality_score=data.get(
+                        "quality_score",
+                        50,
+                    ),
 
-                    reliability_score=
-                        data.get(
-                            "reliability_score",
-                            50,
-                        ),
+                    reliability_score=data.get(
+                        "reliability_score",
+                        50,
+                    ),
                 )
 
 
                 self.capabilities.append(
                     capability
                 )
+
 
 
     def select(
@@ -157,26 +194,23 @@ class ProviderPool:
 
         if self.capabilities:
 
-            selected = (
-                self.matcher.find_best(
-                    media_type=media_type,
-                    quality=quality,
-                    duration=duration,
-                    hdr=hdr,
-                    style=style,
-                )
+            selected = self.matcher.find_best(
+                media_type=media_type,
+                quality=quality,
+                duration=duration,
+                hdr=hdr,
+                style=style,
             )
+
 
             if selected:
 
                 for provider in self.providers:
 
-                    if (
-                        provider.name
-                        ==
-                        selected.provider_name
-                    ):
+                    if provider.name == selected.provider_name:
+
                         return provider
+
 
 
         available = [
@@ -203,6 +237,7 @@ class ProviderPool:
         return available[0]
 
 
+
     def select_many(
         self,
         count=10,
@@ -213,22 +248,36 @@ class ProviderPool:
         return self.providers[:count]
 
 
+
     def status(self):
 
         return {
 
-            "providers":
-                [
-                    provider.name
-                    for provider in self.providers
-                ],
+            "providers": [
+
+                provider.name
+
+                for provider in self.providers
+
+            ],
 
             "count":
+
                 len(self.providers),
 
+
             "capabilities":
+
                 len(self.capabilities),
 
+
+            "registry_connected":
+
+                self.registry is not None,
+
+
             "parallel_ready":
+
                 len(self.providers) >= 10,
+
         }
