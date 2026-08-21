@@ -30,7 +30,7 @@ class AssetGenerator:
         self,
         asset_type: str,
         prompt: str,
-        quality="8k",
+        quality="4k",
         metadata=None
     ):
 
@@ -137,7 +137,7 @@ class AssetGenerator:
     def generate_from_render_plan(
         self,
         render_plan: dict,
-        quality="8k"
+        quality="4k"
     ):
 
         assets = []

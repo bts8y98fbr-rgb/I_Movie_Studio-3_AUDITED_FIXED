@@ -18,7 +18,7 @@ class AIDirector:
     def __init__(
         self,
         project_path="projects/test_movie",
-        quality="8k",
+        quality="4k",
         llm_manager=None,
         runtime_policy=None,
         llm_preference="auto",

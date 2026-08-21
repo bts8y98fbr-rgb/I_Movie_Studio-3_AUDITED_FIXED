@@ -47,7 +47,7 @@ class RemoteVideoProvider(BaseVideoProvider):
     def generate(
         self,
         prompt,
-        quality="8k",
+        quality="4k",
         metadata=None,
         **kwargs,
     ):

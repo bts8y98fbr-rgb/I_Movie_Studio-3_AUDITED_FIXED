@@ -13,7 +13,7 @@ class GenerationTask:
         task_type,
         prompt,
         provider,
-        quality="8k",
+        quality= "4k",
         project_path=None,
         metadata=None,
     ):
