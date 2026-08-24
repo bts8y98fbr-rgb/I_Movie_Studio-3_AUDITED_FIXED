@@ -227,12 +227,13 @@ class ProviderPool:
         ]
 
 
-        if not available:
-
-            raise RuntimeError(
-                "No providers available"
-            )
-
+                if not available:
+            return {
+                "status": "fallback",
+                "provider": None,
+                "fallback_applied": True,
+                "reason": "No AI providers available",
+            }
 
         return available[0]
 
