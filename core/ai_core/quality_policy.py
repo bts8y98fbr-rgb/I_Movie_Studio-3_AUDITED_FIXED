@@ -164,7 +164,6 @@ class QualityPolicy:
         capabilities: dict[str, Any],
         requested: dict[str, Any] | None = None,
     ):
-
         target = dict(
             requested or self.get_video_defaults()
         )
@@ -172,58 +171,39 @@ class QualityPolicy:
         actual = {
             "resolution": self._highest_resolution(
                 target.get("resolution"),
-                capabilities.get(
-                    "resolutions",
-                    []
-                ),
+                capabilities.get("resolutions", []),
             ),
-
             "fps": self._highest_not_exceeding_or_highest(
-                target.get("fps",60),
-                capabilities.get(
-                    "fps",
-                    []
-                ),
-                target.get("fps",60),
+                target.get("fps", 60),
+                capabilities.get("fps", []),
+                target.get("fps", 60),
             ),
-
-            "hdr": target.get(
-                "hdr",
-                True
+            "hdr": (
+                target.get("hdr", True)
+                if target.get("hdr", True) in capabilities.get("hdr", [])
+                else capabilities.get("hdr", [False])[0]
             ),
-
-            "color_depth": target.get(
-                "color_depth",
-                10
+            "color_depth": (
+                target.get("color_depth", 10)
+                if target.get("color_depth", 10) in capabilities.get("color_depth", [])
+                else max(capabilities.get("color_depth", [8]))
             ),
         }
-
 
         fallback = actual != target
 
-
         return {
-            "status":
-                "fallback" if fallback else "approved",
-
-            "requested_quality":
-                target,
-
-            "actual_quality":
-                actual,
-
-            "fallback_applied":
-                fallback,
-
-            "notification":
-                (
-                    "Requested quality was reduced to "
-                    "the highest supported provider capability."
-                    if fallback
-                    else None
-                ),
+            "status": "fallback" if fallback else "approved",
+            "requested_quality": target,
+            "actual_quality": actual,
+            "fallback_applied": fallback,
+            "notification": (
+                "Requested quality was reduced to "
+                "the highest supported provider capability."
+                if fallback
+                else None
+            ),
         }
-
 
     @staticmethod
     def _highest_resolution(requested, available):
