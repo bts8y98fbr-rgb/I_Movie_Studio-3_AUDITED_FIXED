@@ -1,8 +1,10 @@
-from datetime import datetime
-import json
 from pathlib import Path
 from queue import Queue
 import uuid
+
+from core.ai_core.ai_audit_log import AIAuditLog
+from core.ai_core.result_storage import AIResultStorage
+from core.movie_engine.project_events import ProjectEvents
 
 
 class GenerationTask:
@@ -11,7 +13,7 @@ class GenerationTask:
         task_type,
         prompt,
         provider,
-        quality="8k",
+        quality= "4k",
         project_path=None,
         metadata=None,
     ):
@@ -20,8 +22,15 @@ class GenerationTask:
         self.prompt = prompt
         self.provider = provider
         self.quality = quality
-        self.project_path = Path(project_path) if project_path else None
+
+        self.project_path = (
+            Path(project_path)
+            if project_path
+            else None
+        )
+
         self.metadata = dict(metadata or {})
+
         self.status = "waiting"
         self.result = None
         self.output = None
@@ -37,38 +46,17 @@ class GenerationQueue:
         self.tasks.append(task)
         return task
 
-    def save_result(self, task):
+    def _audit(self, task):
         if not task.project_path:
             return None
 
-        folder = task.project_path / "media" / task.task_type
-        folder.mkdir(parents=True, exist_ok=True)
+        return AIAuditLog(task.project_path)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = (
-            f"{task.task_type}_{task.quality}_"
-            f"{timestamp}_{task.task_id}.json"
-        )
-        target = folder / filename
+    def _events(self, task):
+        if not task.project_path:
+            return None
 
-        data = {
-            "task_id": task.task_id,
-            "type": task.task_type,
-            "prompt": task.prompt,
-            "provider": task.provider.name,
-            "quality": task.quality,
-            "status": task.status,
-            "metadata": task.metadata,
-            "result": task.result,
-        }
-
-        target.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-
-        task.output = str(target)
-        return target
+        return ProjectEvents(task.project_path)
 
     def process_next(self):
         if self.queue.empty():
@@ -77,29 +65,142 @@ class GenerationQueue:
         task = self.queue.get()
         task.status = "processing"
 
+        audit = self._audit(task)
+        events = self._events(task)
+
+        if events:
+            events.emit(
+                "generation_started",
+                {
+                    "task_id": task.task_id,
+                    "scene_id": task.metadata.get("scene_id"),
+                    "shot_id": task.metadata.get("shot_id"),
+                },
+            )
+
         try:
+            shot_model_selection = task.metadata.get(
+                "shot_model_selection",
+                {},
+            )
+
+            selected_model = {}
+            if isinstance(shot_model_selection, dict):
+                selected_model = shot_model_selection.get(
+                    "selected_model",
+                    {},
+                )
+
+            if audit:
+                audit.record(
+                    "model_selection",
+                    {
+                        "scene_id": task.metadata.get("scene_id"),
+                        "shot_id": task.metadata.get("shot_id"),
+                        "model": selected_model,
+                        "provider": task.provider.name,
+                        "quality": task.quality,
+                    },
+                )
+
             task.result = task.provider.generate(
                 task.prompt,
                 quality=task.quality,
+                model=shot_model_selection,
                 project_path=task.project_path,
                 metadata=task.metadata,
             )
+
+            if not isinstance(task.result, dict):
+                task.result = {
+                    "result": task.result,
+                }
+
+            task.result.setdefault(
+                "model",
+                selected_model,
+            )
+
+            result_metadata = task.result.setdefault(
+                "metadata",
+                {},
+            )
+
+            if isinstance(result_metadata, dict):
+                result_metadata.setdefault(
+                    "selected_model",
+                    selected_model,
+                )
+
             task.status = "done"
+
+            asset_id = None
+
+            if isinstance(task.result, dict):
+                asset_id = task.result.get("asset_id")
+
+            if audit:
+                audit.record(
+                    "generation_complete",
+                    {
+                        "scene_id": task.metadata.get("scene_id"),
+                        "shot_id": task.metadata.get("shot_id"),
+                        "asset_id": asset_id,
+                        "status": task.status,
+                    },
+                )
+
+            if events:
+                events.emit(
+                    "generation_completed",
+                    {
+                        "task_id": task.task_id,
+                        "asset_id": asset_id,
+                        "status": task.status,
+                    },
+                )
+
         except Exception as exc:
             task.status = "failed"
+
             task.result = {
                 "type": task.task_type,
                 "status": "failed",
                 "error": str(exc),
             }
 
+            if audit:
+                audit.record(
+                    "generation_failed",
+                    {
+                        "scene_id": task.metadata.get("scene_id"),
+                        "shot_id": task.metadata.get("shot_id"),
+                        "error": str(exc),
+                    },
+                )
+
+            if events:
+                events.emit(
+                    "generation_failed",
+                    {
+                        "task_id": task.task_id,
+                        "error": str(exc),
+                    },
+                )
+
         self.save_result(task)
+
         return task
 
     def process_all(self):
         results = []
+
         while not self.queue.empty():
-            results.append(self.process_next())
+            result = self.process_next()
+
+            if result:
+                results.append(result)
+
         return results
 
     def get_status(self):
@@ -107,13 +208,28 @@ class GenerationQueue:
             {
                 "task_id": task.task_id,
                 "type": task.task_type,
-                "prompt": task.prompt,
-                "provider": task.provider.name,
-                "quality": task.quality,
                 "status": task.status,
-                "result": task.result,
-                "output": task.output,
                 "metadata": task.metadata,
+                "result": task.result,
+                "provider": (
+                    task.provider.name
+                    if hasattr(task.provider, "name")
+                    else None
+                ),
+                "quality": task.quality,
+                "output": task.output,
             }
             for task in self.tasks
         ]
+
+    def save_result(self, task):
+        if not task.project_path:
+            return None
+
+        storage = AIResultStorage(task.project_path)
+
+        target = storage.save_result(task)
+
+        task.output = str(target)
+
+        return target
