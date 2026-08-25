@@ -21,8 +21,16 @@ class VideoProvider(BaseAIProvider):
             "media_types": ["video"],
             "resolutions": [
                 "1920x1080",
+                "2048x1080",
                 "3840x2160",
                 "7680x4320",
+            ],
+
+            "qualities": [
+                "1080p",
+                "2k",
+                "4k",
+                "8k",
             ],
             "fps": [
                 24,
