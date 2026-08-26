@@ -11,6 +11,10 @@ from core.ai_core.orchestration.production_orchestrator import (
     ProductionOrchestrator,
 )
 
+from core.ai_core.orchestration.reactive_orchestrator import (
+    ReactiveOrchestrator,
+)
+
 from core.ai_core.providers.video.video_provider import (
     VideoProvider,
 )
@@ -50,6 +54,7 @@ class MoviePipeline:
         generation_queue=None,
         video_provider=None,
         production_orchestrator=None,
+        reactive_orchestrator=None,
     ):
 
         self.project_path = Path(
@@ -83,6 +88,15 @@ class MoviePipeline:
             or ProductionOrchestrator()
         )
 
+        self._scene_inputs = {}
+
+        self.reactive_orchestrator = (
+            reactive_orchestrator
+            or ReactiveOrchestrator(
+                submit_scene=self._regenerate_scene_from_master_prompt
+            )
+        )
+
 
     def create_scene(
         self,
@@ -90,6 +104,14 @@ class MoviePipeline:
         scene_data,
         duration=5,
     ):
+
+        scene_id = int(scene_id)
+        duration = float(duration)
+
+        self._scene_inputs[scene_id] = {
+            "scene_data": dict(scene_data),
+            "duration": duration,
+        }
 
         production_plan = (
             self.production_orchestrator
