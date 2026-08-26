@@ -39,10 +39,28 @@ class GenerationEngine:
         # the compatible legacy provider instance.
         routed_provider = self.provider_router.select("video", mode="free")
         video_provider = self.provider_manager.get("Video AI")
-        if video_provider is None:
-            raise RuntimeError("Video AI provider not found")
+
         if routed_provider is None:
             raise RuntimeError("No eligible video provider in catalog")
+
+        # Resolve the catalog selection to a concrete execution backend.
+        # Until concrete provider adapters are registered, retain the
+        # legacy Video AI backend as a safe execution fallback.
+        routed_name = routed_provider.name
+        provider_aliases = {
+            "PixVerse": "Video AI",
+        }
+        execution_name = provider_aliases.get(routed_name, routed_name)
+        resolved_provider = self.provider_manager.get(execution_name)
+
+        if resolved_provider is not None:
+            video_provider = resolved_provider
+
+        if video_provider is None:
+            raise RuntimeError(
+                f"No execution backend available for routed provider: "
+                f"{routed_name}"
+            )
 
         self.queue = GenerationQueue()
 
