@@ -4,6 +4,7 @@ from pathlib import Path
 
 from core.ai_core.generation_queue import GenerationQueue, GenerationTask
 from core.ai_core.provider_manager import ProviderManager
+from core.ai_core.providers import ProviderCatalog, ProviderRouter, CredentialManager
 from core.ai_core.quality_policy import QualityPolicy
 
 
@@ -13,6 +14,11 @@ class GenerationEngine:
         self.quality = quality
         self.provider_manager = ProviderManager()
         self.provider_manager.load_default_providers()
+        # New provider-routing layer. The legacy ProviderManager remains
+        # the execution backend until all concrete providers are migrated.
+        self.provider_catalog = ProviderCatalog()
+        self.provider_router = ProviderRouter(self.provider_catalog)
+        self.credentials = CredentialManager()
         self.quality_policy = QualityPolicy(quality)
         self.queue = GenerationQueue()
 
@@ -28,9 +34,15 @@ class GenerationEngine:
         render_plan = json.loads(
             render_plan_path.read_text(encoding="utf-8")
         )
+        # Route the task through the new catalog first. At this stage the
+        # selected catalog entry is metadata only; execution still uses
+        # the compatible legacy provider instance.
+        routed_provider = self.provider_router.select("video", mode="free")
         video_provider = self.provider_manager.get("Video AI")
         if video_provider is None:
             raise RuntimeError("Video AI provider not found")
+        if routed_provider is None:
+            raise RuntimeError("No eligible video provider in catalog")
 
         self.queue = GenerationQueue()
 
