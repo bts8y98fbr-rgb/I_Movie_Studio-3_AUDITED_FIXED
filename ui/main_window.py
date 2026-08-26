@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Final
 
 from core.project_manager import Project, ProjectManager
+from core.movie_engine.movie_pipeline import MoviePipeline
 
 try:
     from PyQt6.QtCore import QTimer, Qt
@@ -204,8 +205,54 @@ if QApplication is not None:
         def set_project_manager(self, manager: ProjectManager) -> None:
             self.project_manager = manager
 
+        def _create_generation_page(self) -> QWidget:
+            page = QWidget()
+            layout = QVBoxLayout(page)
+            title = QLabel("Generation")
+            title.setObjectName("pageTitle")
+            layout.addWidget(title)
+            layout.addWidget(QLabel(
+                "Master prompt: changing it creates a new revision and "
+                "regenerates only the selected/known scenes."
+            ))
+            self.master_prompt = QPlainTextEdit()
+            self.master_prompt.setPlaceholderText(
+                "Global cinematic direction..."
+            )
+            self.master_prompt.setMinimumHeight(150)
+            layout.addWidget(self.master_prompt)
+            self.regenerate_button = QPushButton(
+                "Apply prompt and regenerate"
+            )
+            self.regenerate_button.clicked.connect(self._apply_master_prompt)
+            layout.addWidget(self.regenerate_button)
+            self.generation_revision_label = QLabel("Revision: —")
+            self.generation_status_label = QLabel("Status: idle")
+            layout.addWidget(self.generation_revision_label)
+            layout.addWidget(self.generation_status_label)
+            layout.addStretch()
+            return page
+
+        def _apply_master_prompt(self) -> None:
+            if self.movie_pipeline is None:
+                self.statusBar().showMessage("No movie pipeline is attached")
+                return
+            prompt = self.master_prompt.toPlainText().strip()
+            if not prompt:
+                self.statusBar().showMessage("Master prompt is empty")
+                return
+            result = self.movie_pipeline.regenerate_from_master_prompt(prompt)
+            self.generation_revision_label.setText(
+                f"Revision: {result.get('revision', '—')}"
+            )
+            self.generation_status_label.setText(
+                f"Status: {result.get('status', 'unknown')}"
+            )
+
+
         def _set_current_project(self, project: Project) -> None:
             self.current_project = project
+            self.movie_pipeline = MoviePipeline(project.path)
             self._project_label.setText(project.name)
             self.statusBar().showMessage(f"Project opened: {project.name}")
 

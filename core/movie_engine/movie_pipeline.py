@@ -194,6 +194,44 @@ class MoviePipeline:
                 timeline_item,
         }
 
+    def regenerate_from_master_prompt(
+        self,
+        prompt,
+        affected_scene_ids=None,
+    ):
+        scene_ids = (
+            list(self._scene_inputs)
+            if affected_scene_ids is None
+            else list(affected_scene_ids)
+        )
+        return self.reactive_orchestrator.apply(prompt, scene_ids)
+
+    def _regenerate_scene_from_master_prompt(
+        self,
+        scene_id,
+        prompt,
+    ):
+        original = self._scene_inputs.get(int(scene_id))
+        if original is None:
+            return {
+                "status": "skipped",
+                "scene_id": scene_id,
+                "reason": "Scene is not registered in this pipeline",
+            }
+
+        scene_data = dict(original["scene_data"])
+        scene_data["master_prompt"] = prompt
+        result = self.create_scene(
+            scene_id,
+            scene_data,
+            original["duration"],
+        )
+        return {
+            "status": "submitted",
+            "scene_id": scene_id,
+            "generated_tasks": len(result.get("generated_tasks", [])),
+        }
+
 
     def _queue_shots(
         self,
