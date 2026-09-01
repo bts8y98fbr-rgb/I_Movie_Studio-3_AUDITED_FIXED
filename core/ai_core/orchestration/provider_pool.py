@@ -41,26 +41,34 @@ class ProviderPool:
 
         self._load_capabilities()
 
+    def _sync_from_registry(self):
+        """Synchronize the pool with its registry."""
+        if self.registry is None:
+            return
+
+        self.providers = self.registry.list_providers()
+        self.capabilities.clear()
+        self._load_capabilities()
+
     def attach_registry(
         self,
         registry: ProviderRegistry,
     ):
         self.registry = registry
-        self.providers = registry.list_providers()
-        self.capabilities.clear()
-        self._load_capabilities()
+        self._sync_from_registry()
 
     def add_provider(
         self,
         provider,
         capability=None,
     ):
-        self.providers.append(provider)
-
         if self.registry:
             self.registry.register(provider)
+            self._sync_from_registry()
+        else:
+            self.providers.append(provider)
 
-        if capability:
+        if capability and capability not in self.capabilities:
             self.capabilities.append(capability)
 
     def _load_capabilities(self):
@@ -132,6 +140,8 @@ class ProviderPool:
         hdr=False,
         style=None,
     ):
+        self._sync_from_registry()
+
         if self.capabilities:
             selected = self.matcher.find_best(
                 media_type=media_type,
@@ -168,9 +178,11 @@ class ProviderPool:
         media_type="video",
         quality=None,
     ):
+        self._sync_from_registry()
         return self.providers[:count]
 
     def status(self):
+        self._sync_from_registry()
         return {
             "providers": [
                 provider.name
