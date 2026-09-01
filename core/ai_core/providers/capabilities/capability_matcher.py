@@ -15,7 +15,8 @@ class CapabilityMatcher:
     ):
         self.capabilities = (
             capabilities
-            or []
+            if capabilities is not None
+            else []
         )
 
 
