@@ -6,9 +6,7 @@ from core.ai_core.providers.capabilities.provider_capability import (
 from core.ai_core.providers.capabilities.capability_matcher import (
     CapabilityMatcher,
 )
-from core.ai_core.providers.registry.provider_registry import (
-    ProviderRegistry,
-)
+from core.ai_core.providers.provider_registry import ProviderRegistry
 
 
 class ProviderPool:
@@ -31,7 +29,7 @@ class ProviderPool:
         self.registry = registry
 
         if registry:
-            self.providers = registry.all()
+            self.providers = registry.list_providers()
         else:
             self.providers = providers or []
 
@@ -48,7 +46,7 @@ class ProviderPool:
         registry: ProviderRegistry,
     ):
         self.registry = registry
-        self.providers = registry.all()
+        self.providers = registry.list_providers()
         self.capabilities.clear()
         self._load_capabilities()
 

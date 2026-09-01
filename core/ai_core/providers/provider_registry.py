@@ -28,5 +28,3 @@ class ProviderRegistry:
     def clear(self):
         self.providers.clear()
 
-
-registry = ProviderRegistry()
