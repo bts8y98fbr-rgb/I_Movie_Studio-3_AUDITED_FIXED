@@ -6,6 +6,26 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Approved standing decisions
 
+### DEC-APPROVED-006 — Stage 1C regression-test router injection scope extension
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
+- Related decision: `DEC-APPROVED-005`
+- Authorized scope: extension of stage 1C
+- Permitted additional files only:
+  - `tests/test_full_asset_pipeline.py`
+  - `tests/test_generation_pipeline.py`
+  - `tests/test_model_generation_flow.py`
+- In each permitted test, an instance-local router returning the registered `Video AI` provider may be injected
+- The real `ProviderManager`, `ProviderRegistry`, `GenerationQueue`, and asset pipeline must remain in use
+- Existing assertions must not be changed
+- No additional production-code changes are permitted
+- Helper files must not be created
+- Targeted GREEN gate: exactly `2 passed`
+- Full regression gate: exactly `76 passed`, with no failures, skips or xfails
+- Existing unrelated dirty-working-tree changes must remain untouched
+
 ### DEC-APPROVED-005 — Minimal provider identity production fix
 
 - Status: APPROVED
