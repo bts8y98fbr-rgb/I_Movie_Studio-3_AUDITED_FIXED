@@ -6,6 +6,24 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Approved standing decisions
 
+### DEC-APPROVED-008 — Default Router/Registry consistency RED test
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
+- Base commit: `d84c5b9`
+- Related decisions: `DEC-APPROVED-002`, `DEC-APPROVED-005`, `DEC-APPROVED-006`, `DEC-APPROVED-007`
+- Authorized stage: 1D — one new RED test for consistency between default routing and the execution registry
+- Permitted test file: `tests/test_default_provider_routing_registry_consistency.py`
+- Permitted governance worklog: `.ai_exchange/CODEX_WORKLOG.md`
+- The test must use the actual default `ProviderRouter` and `ProviderManager`/`ProviderRegistry`
+- Fake routers, instance injection, and substitution of `ProviderManager` or `ProviderRegistry` are prohibited
+- The test must not hard-code the expected provider identity
+- Production code and existing tests must not be changed
+- Network, live APIs, credentials, `.env`, and GUI are prohibited
+- Stop after the expected RED
+- A production fix requires a separate Product Owner decision
+
 ### DEC-APPROVED-007 — Stage 1C quality and storage test router injection scope extension
 
 - Status: APPROVED

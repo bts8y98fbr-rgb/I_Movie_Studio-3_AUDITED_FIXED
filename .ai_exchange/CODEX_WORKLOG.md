@@ -17,6 +17,26 @@
 
 ## Entries
 
+## CODEX-RUN-20260903-002
+
+- Mode: Codex desktop, stage 1D default Router/Registry consistency RED test
+- Repository: local `I_Movie_Studio-3_AUDITED_FIXED`
+- Base commit: `d84c5b9`
+- Related decision: `DEC-APPROVED-008`
+- Test file: only new untracked `tests/test_default_provider_routing_registry_consistency.py`
+- Test command: `PATH="$PWD/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q tests/test_default_provider_routing_registry_consistency.py`
+- Test result: `1 failed in 0.10s`
+- Routed identity: `PixVerse`, observed from the actual default `ProviderRouter`
+- Execution backend lookup: `None`, returned by the actual default `ProviderManager`/`ProviderRegistry` for the routed identity
+- RED reason: `default routed provider 'PixVerse' has no registered execution backend`
+
+### Scope and controls
+
+- The test uses the default `GenerationEngine` wiring without fake routers, instance injection, manager/registry substitution, monkeypatching, render plans, or `generate_scene()`.
+- Network, live APIs, credentials, `.env`, and GUI were not used.
+- Production code and existing tests were not changed.
+- Stage 1D is stopped after the expected RED and awaits Copilot review and a separate Product Owner decision before any production fix.
+
 ## CODEX-RUN-20260903-001
 
 - Mode: Codex desktop, stage 1B governance record
