@@ -17,6 +17,172 @@
 
 ## Entries
 
+## CODEX-RUN-20260903-006
+
+- Mode: Codex desktop, read-only ModelPolicy propagation audit with isolated governance recording
+- Repository: local `I_Movie_Studio-3_AUDITED_FIXED`
+- Base commit: `88b37c8ad2d077309fcb2dae214aab25be0face0`
+- Examined HEAD: `88b37c8ad2d077309fcb2dae214aab25be0face0`
+- Examined `origin/main`: `88b37c8ad2d077309fcb2dae214aab25be0face0` after `git fetch origin main`; divergence `0/0`
+- Related decision: `DEC-APPROVED-011`
+- Scope: read-only audit of canonical ModelPolicy propagation from user/project state to `GenerationQueue.process_next()` after Stage 2B
+- Verdict: canonical fixed `core.ai_core.model_policy.ModelPolicy` reaches the execution boundary only when a caller explicitly attaches it to `GenerationTask`; no examined production task producer currently does so
+
+### Published Stage 2B verification
+
+- `DEC-APPROVED-011` is present in `.ai_exchange/DECISIONS.md`.
+- Governance commit `e64d7a7` changes only `.ai_exchange/DECISIONS.md`.
+- Runtime commit `88b37c8` changes only `core/ai_core/generation_queue.py` and `tests/test_runtime_model_policy_boundary.py`.
+- `tests/test_runtime_model_policy_boundary.py` contains two tests: mismatch refusal and exact fixed match.
+- `GenerationTask` now has an optional `model_policy`; `GenerationQueue.process_next()` enforces canonical fixed provider/model identity before the `model_selection` audit and before `provider.generate()`.
+
+### Actual policy propagation map
+
+#### UI and project persistence path
+
+```text
+UI provider/model/mode widgets
+    -> no conversion to canonical ModelPolicy
+    -> no assignment to Project.metadata
+    -> no persistence/reload contract
+    -> MoviePipeline(project.path) without policy
+```
+
+- `ui/main_window.py:41-62` defines a second UI-local `SelectionMode` and `ModelPolicy`, not `core.ai_core.model_policy.ModelPolicy`.
+- `ui/main_window.py:90` initializes `model_policies` as an empty dictionary; no production code populates or consumes it.
+- `ui/main_window.py:156-164` creates provider, model, and mode widgets, but no handler converts their values into either UI or canonical policy.
+- `ui/main_window.py:253-256` creates `MoviePipeline` with only `project.path`.
+- `ui/main_window.py:281-290` saves the current `Project` without copying UI model selections into project metadata.
+- `core/project_manager.py:68-79` persists only the generic `Project.metadata` dictionary.
+- `core/project_manager.py:99-116` reloads metadata as a plain dictionary and does not reconstruct a canonical policy.
+
+#### Render-plan / GenerationEngine path
+
+```text
+ShotRenderer
+    -> ModelRouter / ShotModelSelector
+    -> render_plan.shots[].shot_model_selection
+    -> GenerationEngine.generate_scene()
+    -> GenerationTask(metadata=..., model_policy omitted)
+    -> GenerationQueue.process_next(): task.model_policy is None
+    -> fixed enforcement skipped
+    -> provider.generate()
+```
+
+- `core/movie_engine/shot_renderer.py:19-22` constructs `QualityPolicy`, `ModelRouter`, and `ShotModelSelector`, but no canonical `ModelPolicy`.
+- `core/movie_engine/shot_renderer.py:35-64` writes model selection into the render plan without provider/model policy.
+- `core/movie_engine/generation_engine.py:11-28` accepts project path and quality only; no policy input or project-policy load exists.
+- `core/movie_engine/generation_engine.py:85-108` copies `shot_model_selection` into metadata but constructs `GenerationTask` without `model_policy`.
+- `core/movie_engine/generation_engine.py:109-111` queues and processes those policy-less tasks through the real `GenerationQueue`.
+- `core/movie_engine/render_engine.py:17-38` delegates to `GenerationEngine` without policy and inherits the same break.
+
+#### MoviePipeline / UI movie path
+
+```text
+MainWindow._set_current_project()
+    -> MoviePipeline(project.path)
+    -> concrete VideoProvider()
+    -> GenerationTask(model_policy omitted, shot_model_selection absent)
+    -> GenerationQueue.process_next(): fixed enforcement skipped
+    -> provider.generate()
+```
+
+- `core/movie_engine/movie_pipeline.py:49-98` has no policy parameter and constructs a concrete `VideoProvider` independently of UI selection.
+- `core/movie_engine/movie_pipeline.py:146-155` sends queued shots to the shared `GenerationQueue`.
+- `core/movie_engine/movie_pipeline.py:258-323` constructs `GenerationTask` without `model_policy` and without `shot_model_selection`.
+- This path does not silently fallback inside the queue; it bypasses user policy entirely by selecting its provider independently.
+
+#### Other generation-like paths
+
+- `core/ai_core/llm/llm_manager.py:64-85` selects an LLM and calls `provider.generate()` directly, bypassing `GenerationQueue`; it uses hardware-oriented `RuntimePolicy`, not canonical ModelPolicy.
+- `core/ai_core/ai_director.py:344-384` uses that direct LLM path while building direction data.
+- `core/ai_core/asset_generator.py:137-223` writes deterministic local asset manifests directly and does not use a provider or `GenerationQueue`; it has no ModelPolicy enforcement.
+- The only production `GenerationTask` constructors found are in `GenerationEngine` and `MoviePipeline`; both omit `model_policy`.
+
+### Execution-boundary contract and schema
+
+- `core/ai_core/generation_queue.py:11-35` stores the optional `GenerationTask.model_policy`.
+- `core/ai_core/generation_queue.py:85-107` expects model identity at `task.metadata["shot_model_selection"]["selected_model"]["name"]`.
+- `core/ai_core/generation_queue.py:97-123` validates only canonical `SelectionMode.FIXED` policies.
+- `core/ai_core/generation_queue.py:125-143` performs the model-selection audit and provider call only after fixed validation.
+- `core/ai_core/generation_queue.py:194-224` converts a policy mismatch into an explicit failed task.
+- Tasks with no policy preserve legacy behavior: the fixed block is skipped, audit occurs, and the provider is called.
+
+There is a separate model-schema risk in the actual render-plan producer:
+
+- `core/ai_core/model_router.py:105-113` returns a wrapper containing `selected_model`.
+- `core/ai_core/shot_model_selector.py:54-90` stores that whole wrapper under another `selected_model` key.
+- Therefore the produced path is effectively `shot_model_selection.selected_model.selected_model.name`, while `GenerationQueue` expects `shot_model_selection.selected_model.name`.
+- If a fixed policy were propagated today through this producer, queue validation would observe a missing model identity and refuse execution.
+
+### First proven break
+
+The earliest user-facing break is `ui/main_window.py:156-164`: provider/model/mode selections are displayed but never converted to the canonical core ModelPolicy or stored. The first narrow task-construction break is `core/movie_engine/generation_engine.py:101-108`, where available shot model metadata is placed on a task but `model_policy` is omitted.
+
+No production path currently proves the complete chain:
+
+```text
+user/project policy -> canonical ModelPolicy -> GenerationTask.model_policy -> GenerationQueue fixed enforcement
+```
+
+### Fixed, preferred, and automatic verdict
+
+- `fixed`: enforcement is correct at queue boundary only when a canonical policy and flat string model identity are already attached to the task; no production producer supplies the policy.
+- `preferred`: canonical `ModelPolicy.allows()` has a model-list unit contract, but `GenerationQueue` does not enforce preferred mode and no production producer supplies the policy.
+- `automatic`: canonical `ModelPolicy.allows()` currently returns `True`, but `GenerationQueue` does not evaluate automatic mode and no production producer supplies the policy or an approved provider/model set.
+- UI fixed/preferred/automatic values belong to different UI-local classes and have no runtime or persistence path.
+
+### Recommended minimal next RED stage
+
+Create only one new test file:
+
+```text
+tests/test_generation_engine_model_policy_propagation.py
+```
+
+The single hermetic test should:
+
+1. use canonical `ModelPolicy` with `SelectionMode.FIXED`;
+2. attach it at a proposed explicit `GenerationEngine.model_policy` boundary without changing production code during RED;
+3. use a temporary one-shot render plan with the flat expected schema `shot_model_selection["selected_model"]["name"]`;
+4. use instance-local routing to an already registered execution backend and a local call spy, without network or credentials;
+5. call the real `GenerationEngine.generate_scene()` and real `GenerationQueue`;
+6. assert that the created task carries the same canonical policy and that a deliberate fixed mismatch is refused before provider generation.
+
+Expected RED: the task has `model_policy is None` because `GenerationEngine` omits it at construction, so the provider is called instead of being refused. This isolates policy propagation from UI, persistence, Router availability, and the separate selected-model schema defect.
+
+### Presumed future production scope after accepted RED
+
+- Primary file: `core/movie_engine/generation_engine.py` — accept/store one optional canonical policy and pass it unchanged to every created `GenerationTask`.
+- No change to `GenerationQueue` should be required for this narrow propagation fix because Stage 2B already enforces fixed mode.
+- Closing the full user/project path later will require separate decisions for `ui/main_window.py`, `core/project_manager.py`, and likely `core/movie_engine/movie_pipeline.py`; these must not be combined with the narrow RED stage.
+
+### Explicitly prohibited in the next RED stage
+
+- All production files, existing tests, documentation, and other governance files.
+- UI policy consolidation, project persistence changes, preferred/automatic semantics, Router/Registry/ProviderManager changes, fallback, PixVerse integration, Reactive Orchestrator changes, and live provider calls.
+- Changes to `core/ai_core/model_policy.py`, `core/ai_core/generation_queue.py`, `core/movie_engine/generation_engine.py`, `core/movie_engine/movie_pipeline.py`, `ui/main_window.py`, and `core/project_manager.py` before a separate Product Owner decision.
+
+### Residual risks after a future narrow propagation fix
+
+- UI still uses a duplicate policy type and does not materialize or persist selections.
+- Reopened projects still cannot reconstruct canonical policy.
+- `MoviePipeline` remains a parallel policy-less video execution path.
+- `ShotRenderer` model-selection nesting is incompatible with the queue's fixed identity lookup.
+- Preferred and automatic policies remain unenforced at execution.
+- Canonical preferred policy tracks approved model names but not an approved provider set.
+- Direct LLM provider calls bypass `GenerationQueue` and its fixed enforcement.
+- Tasks without policy intentionally continue to execute under legacy behavior.
+- Provider/model identity is still string-name based rather than a separately approved canonical ID contract.
+
+### Scope and controls
+
+- Production code and tests were not changed during this audit.
+- No full pytest suite was run.
+- No live API, provider request, credentials, `.env`, or GUI was used.
+- The pre-existing dirty tree was preserved; no reset, clean, checkout, stash, restore, deletion, or unrelated staging occurred.
+- Any RED test or production propagation fix requires a separate explicit decision from Sergey, Product Owner.
+
 ## CODEX-RUN-20260903-005
 
 - Mode: ChatGPT Work isolated repository worktree, stage 2A fixed ModelPolicy execution-boundary RED test
