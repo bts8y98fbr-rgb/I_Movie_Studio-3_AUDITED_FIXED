@@ -17,6 +17,104 @@
 
 ## Entries
 
+## CODEX-RUN-20260903-009
+
+- Mode: Codex desktop, Stage 2D hermetic selected-model canonical schema RED test
+- Repository: local `I_Movie_Studio-3_AUDITED_FIXED`
+- Base commit: `ace1d4e3d8cd31fa7421133dd526384953011a6c`
+- Examined HEAD: `ace1d4e3d8cd31fa7421133dd526384953011a6c`
+- Related decision: `DEC-APPROVED-014`
+- Related review: `MSG-COPILOT-20260903-011`
+- Test file: only new local untracked `tests/test_selected_model_schema_contract.py`
+- Targeted command: `PATH="$PWD/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q tests/test_selected_model_schema_contract.py`
+- Targeted result: `1 failed in 0.19s`
+- RED verdict: EXPECTED — the real producer emitted the model identity only at the double-nested path, so the flat fixed-policy consumer read selected model `None` and falsely refused an exact provider/model match
+
+### Observed schema and execution state
+
+- Canonical expected path: `shot_model_selection.selected_model.name`
+- Actual nested path: `shot_model_selection.selected_model.selected_model.name`
+- Canonical flat value: `None`
+- Nested identity value: `requested-model`
+- Canonical policy: `ModelPolicy(provider="Video AI", model="requested-model", mode=SelectionMode.FIXED)`
+- Actual `task.model_policy`: the identical canonical policy object (`task.model_policy is policy` is `True`)
+- Provider generate spy call count: `0`
+- Task status: `failed`
+- Result status: `failed`
+- Exact policy error: `Fixed model policy mismatch: requested provider='Video AI', model='requested-model'; selected provider='Video AI', model=None`
+- Assertion diagnostic recorded the complete observed state: flat name `None`, nested wrapper present, nested identity `requested-model`, propagated policy identity `True`, zero provider calls, and failed task/result.
+
+### Proven real producer-to-consumer path
+
+```text
+real QualityPolicy
+    -> real ModelRouter constrained to one requested-model descriptor
+    -> real ShotModelSelector
+    -> real ShotRenderer.create_render_plan(1) under tmp_path
+    -> real GenerationEngine.generate_scene(1)
+    -> real GenerationTask(model_policy=policy)
+    -> real GenerationQueue fixed-policy boundary
+    -> real ProviderManager/ProviderRegistry backend lookup
+    -> registered Video AI backend generate spy not called
+```
+
+- `ShotRenderer` created and serialized the actual render plan from a one-shot storyboard under `tmp_path`.
+- `renderer.shot_selector` continued using the same real `renderer.model_router` instance after its video candidates were constrained to the deterministic descriptor.
+- `GenerationEngine`, `GenerationTask`, `GenerationQueue`, `ProviderManager`, and authoritative `ProviderRegistry` were not replaced.
+- The backend was obtained from `engine.provider_manager.get("Video AI")` and existed with identity `Video AI`.
+
+### Permitted controls and hermeticity
+
+- The real `ModelRouter` was constrained to exactly one deterministic video descriptor named `requested-model`.
+- An instance-local provider router stub selected only the already registered backend identity `Video AI`; it did not create or replace the backend, manager, or registry.
+- Only `generate()` on that obtained backend instance was replaced with a local call-recording success spy.
+- All storyboard, render-plan, audit, event, result, and asset artifacts were confined to pytest `tmp_path`.
+- No network, live provider request, live API, credentials, `.env`, or GUI was used.
+- The initially prescribed unqualified `python` command could not start because this shell has no `python` executable (`exit 127`); no test was collected in that attempt. The project-local `.venv/bin` was then placed first on `PATH`, and the targeted gate above ran normally.
+
+### Exact RED cause and first break
+
+- `ModelRouter.get_best_model()` correctly returned a routing wrapper whose `model_result["selected_model"]` was the `requested-model` descriptor.
+- The first producer break is `core/ai_core/shot_model_selector.py`, where `ShotModelSelector.select_for_shot()` assigns `"selected_model": model_result` instead of the descriptor.
+- That assignment produced `shot_model_selection.selected_model.selected_model.name` and left the authoritative flat identity absent.
+- `GenerationQueue` correctly consumed its approved flat contract, obtained `selected_model_name=None`, and refused the exact fixed policy before provider execution.
+- The RED is exclusively the double-nested selected-model schema mismatch; there were no import, collection, syntax, filesystem, provider routing, credential, or network failures in the actual pytest run.
+
+### Routing diagnostics
+
+- Production routing diagnostics were not changed, removed, normalized, or discarded during this RED stage.
+- The test observes the current wrapper but does not accept nested and flat structures as equivalent.
+- The exact future `routing_diagnostics` sibling schema requires a separate Product Owner decision before any production implementation.
+
+### Presumed future scope
+
+Recommendation only; not authorization:
+
+- Future production owner: `core/ai_core/shot_model_selector.py`.
+- Likely future test scope:
+  - `tests/test_selected_model_schema_contract.py`;
+  - `tests/test_shot_model_selection.py`.
+- The production fix should establish the flat descriptor contract at the producer and preserve approved diagnostics as explicitly named sibling metadata.
+- `GenerationQueue` and `ShotRenderer` normalization remain prohibited as the primary fix.
+
+### Backward compatibility and residual risks
+
+- Existing production render plans may contain the nested schema, while hand-authored plans may already be flat.
+- Migration, explicit rejection, schema versioning, or a compatibility adapter for existing nested plans requires a separate Product Owner decision and was not addressed by this RED.
+- The exact `routing_diagnostics` field set and persistence/versioning semantics remain undecided.
+- Queue still passes the outer shot-model-selection envelope to the provider model argument; this separate contract was not changed.
+- Provider/result/storage metadata can retain inconsistent nesting, and dashboard/report consumers can omit nested identities.
+- Model/provider identities remain string-based.
+
+### Scope and stop condition
+
+- Production code and existing tests were not changed.
+- No full pytest suite was run.
+- The only new test remains local and untracked; it was not staged, committed, or pushed.
+- The pre-existing unrelated dirty/untracked tree was preserved.
+- `ModelPolicy`, UI, persistence, `MoviePipeline`, default Router, `ProviderManager`, `ProviderRegistry`, PixVerse, fallback, Reactive Orchestrator, `GenerationQueue`, and `ShotRenderer` were not changed.
+- Stage 2D is stopped after the expected RED pending Copilot review and separate Product Owner decisions for `routing_diagnostics`, backward compatibility, and any production fix.
+
 ## CODEX-RUN-20260903-008
 
 - Mode: Codex desktop, read-only selected-model schema propagation audit with isolated governance recording
