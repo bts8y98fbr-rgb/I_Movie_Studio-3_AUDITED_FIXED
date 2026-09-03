@@ -6,6 +6,49 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Approved standing decisions
 
+### DEC-APPROVED-014 — Selected-model canonical schema RED test
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
+- Related audit: `CODEX-RUN-20260903-008`
+- Related Copilot review: `MSG-COPILOT-20260903-011`
+- Authorized stage: 2D — one hermetic RED test for the selected-model schema contract
+- Permitted test file only:
+  - `tests/test_selected_model_schema_contract.py`
+- Permitted governance worklog:
+  - `.ai_exchange/CODEX_WORKLOG.md`
+- Production code and existing tests must not be changed
+- The authoritative schema is:
+  - `shot_model_selection.selected_model.name: string`
+- `selected_model` must contain the model descriptor, not the complete `ModelRouter` result wrapper
+- `ShotModelSelector` owns the selected-model descriptor contract
+- Routing diagnostics must not be silently discarded
+- A future production contract must preserve approved routing diagnostics as explicitly named sibling metadata, such as `routing_diagnostics`
+- The exact routing-diagnostics schema requires a separate Product Owner decision before production implementation
+- The test must use the real `QualityPolicy`, `ModelRouter`, `ShotModelSelector`, `ShotRenderer`, `GenerationEngine`, `GenerationTask`, `GenerationQueue`, `ProviderManager` and `ProviderRegistry`
+- The real `ModelRouter` must be constrained to one deterministic model descriptor named `requested-model`
+- An instance-local provider router stub may select only the registered `Video AI` backend
+- A spy may replace only `generate()` on the obtained backend
+- The real `ShotRenderer` must create the render plan under `tmp_path`
+- A canonical fixed policy must request `Video AI/requested-model`
+- Expected RED must prove:
+  - identity exists only at the nested path;
+  - canonical flat name is absent;
+  - exact fixed policy is falsely refused;
+  - provider call count is zero;
+  - task and result are failed;
+  - policy error reports selected model `None`
+- The test must not accept both flat and nested structures
+- `GenerationQueue` normalization is prohibited
+- `ShotRenderer` normalization is prohibited
+- Routing diagnostics must not be silently discarded
+- Production fix requires a separate Product Owner decision
+- Network, live providers, credentials, `.env` and GUI are prohibited
+- Do not modify `ModelPolicy`, UI, persistence, `MoviePipeline`, Router, Registry, `ProviderManager`, PixVerse, fallback or Reactive Orchestrator
+- Stop after the expected RED
+- Do not commit the known-failing test to main
+
 ### DEC-APPROVED-013 — GenerationEngine fixed ModelPolicy propagation production fix
 
 - Status: APPROVED
