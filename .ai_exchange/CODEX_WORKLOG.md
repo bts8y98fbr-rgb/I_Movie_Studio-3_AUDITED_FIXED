@@ -17,6 +17,83 @@
 
 ## Entries
 
+## CODEX-RUN-20260903-007
+
+- Mode: Codex desktop, stage 2C hermetic GenerationEngine fixed ModelPolicy propagation RED test
+- Repository: local `I_Movie_Studio-3_AUDITED_FIXED`
+- Base commit: `9d293b97afd1a3da8c7bbf45c24fb31f54d1d953`
+- Examined HEAD: `5837bdab493c355ad2aee636d3ee155fdb4d698f`
+- Related decision: `DEC-APPROVED-012`
+- Test file: only new untracked `tests/test_generation_engine_model_policy_propagation.py`
+- Targeted command: `PATH="$PWD/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q tests/test_generation_engine_model_policy_propagation.py`
+- Targeted result: `1 failed in 0.14s`
+- RED verdict: EXPECTED — `GenerationEngine` omitted the canonical fixed policy while constructing `GenerationTask`, so the queue did not refuse a deliberate model mismatch before execution
+
+### Observed policy and task state
+
+- Canonical policy: `ModelPolicy(provider="Video AI", model="requested-model", mode=SelectionMode.FIXED)`
+- Selected execution model identity: `executed-model`
+- Actual `task.model_policy`: `None`
+- Provider spy call count: `1`
+- Actual task status: `done`
+- Actual task result status: `success`
+- Exact assertion diagnostic: `GenerationEngine omitted canonical ModelPolicy: task.model_policy=None; provider_spy_call_count=1; task.status='done'; task.result_status='success'`
+- The expected fixed-policy refusal did not occur because `GenerationQueue.process_next()` received no policy on the task.
+
+### Proven runtime path and hermeticity
+
+```text
+canonical ModelPolicy attached to engine.model_policy
+    -> actual GenerationEngine.generate_scene(1)
+    -> actual registered Video AI backend from ProviderManager/ProviderRegistry
+    -> actual GenerationTask(model_policy=None)
+    -> actual GenerationQueue.process_all()/process_next()
+    -> local backend generate spy called once
+```
+
+- The test uses the actual `GenerationEngine`, `GenerationTask`, `GenerationQueue`, `ProviderManager`, and `ProviderRegistry`.
+- `ProviderManager` and `ProviderRegistry` were not replaced or monkeypatched.
+- The instance-local router stub was used only to select the already registered `Video AI` backend deterministically; provider routing is not the subject of this test.
+- Only the registered backend instance's `generate()` method was replaced by a local call-recording spy, which returned a deterministic in-memory result.
+- The render plan contains one shot and the flat boundary schema `shot_model_selection["selected_model"]["name"] = "executed-model"`.
+- No network, live API, live provider request, credentials, `.env`, or GUI was used.
+- The first prescribed shell invocation could not start pytest because unqualified `python` was unavailable (`exit 127`); the project-local `.venv/bin` was then placed first on `PATH`, and the targeted gate above ran normally.
+
+### First proven propagation break
+
+- `core/movie_engine/generation_engine.py` creates `GenerationTask` without passing `self.model_policy` (or any `model_policy`).
+- Consequently, the canonical policy attached at the proposed `GenerationEngine.model_policy` boundary is lost at task construction.
+- The Stage 2B fixed-policy enforcement in `GenerationQueue` remains present but is bypassed because `task.model_policy` is `None`.
+
+### Recommended future production scope
+
+This is a recommendation only and does not authorize a production fix:
+
+- `core/movie_engine/generation_engine.py`
+- `tests/test_generation_engine_model_policy_propagation.py`
+
+The narrow future change should pass the identical optional canonical policy object from `GenerationEngine` into each created `GenerationTask`. Any production change requires a separate Product Owner decision.
+
+### Residual risks outside this RED stage
+
+- UI defines a duplicate ModelPolicy type and does not materialize the canonical policy.
+- Project persistence does not save or reconstruct canonical policy.
+- `MoviePipeline` remains policy-less.
+- The actual ShotModelSelector path has double nesting under `selected_model`, unlike the flat execution-boundary schema used here.
+- Preferred and automatic ModelPolicy semantics remain outside the queue enforcement implemented in Stage 2B.
+- Direct LLM generation paths bypass `GenerationQueue`.
+- PixVerse and provider availability remain outside this stage.
+- Fallback semantics remain outside this stage and no fallback was added.
+
+### Scope and controls
+
+- Production code and existing tests were not changed.
+- The only new test is local and untracked; it was not staged, committed, or pushed.
+- The pre-existing dirty working tree was preserved against the recorded baseline.
+- No full regression suite was run.
+- No ModelPolicy semantics, Router, Registry, ProviderManager, UI, persistence, MoviePipeline, PixVerse, fallback, or Reactive Orchestrator behavior was changed.
+- Stage 2C is stopped after the expected RED pending Copilot review and a separate decision from Sergey, Product Owner.
+
 ## CODEX-RUN-20260903-006
 
 - Mode: Codex desktop, read-only ModelPolicy propagation audit with isolated governance recording
