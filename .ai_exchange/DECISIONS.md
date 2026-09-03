@@ -6,6 +6,39 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Approved standing decisions
 
+### DEC-APPROVED-011 — Minimal fixed ModelPolicy execution-boundary production fix
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
+- Base commit: `166f8f1`
+- Related decision: `DEC-APPROVED-010`
+- Authorized stage: 2B — minimal fixed ModelPolicy execution-boundary production fix
+- Permitted runtime files only:
+  - `core/ai_core/generation_queue.py`
+  - `tests/test_runtime_model_policy_boundary.py`
+- `GenerationTask` may accept an optional canonical `model_policy`
+- Canonical `SelectionMode.FIXED` must be validated in `GenerationQueue.process_next()` before the `model_selection` audit and before `provider.generate()`
+- Runtime provider identity must be read from `task.provider.name`
+- Runtime model identity must be read as a string from `selected_model["name"]`
+- Both identities must exactly match the provider and model specified by the fixed policy
+- A mismatch or missing string identity must:
+  - finish the task with status `failed`;
+  - produce an explicit policy error;
+  - prevent the `model_selection` audit;
+  - prevent every call to `provider.generate()`
+- An exact fixed provider/model match must permit exactly one provider call
+- Tasks without `model_policy` must preserve their previous behavior
+- Preferred and automatic ModelPolicy semantics must not be changed
+- UI, persistence, Router, ProviderManager, ProviderRegistry, PixVerse, fallback, Reactive Orchestrator and existing tests are outside scope
+- New provider integrations and fallback are prohibited
+- Targeted GREEN gate: exactly `2 passed`
+- Full regression gate: exactly `80 passed`, with no failures, skips or xfails
+- `git diff --check` must report no errors
+- The runtime commit must contain only the two permitted runtime files
+- Governance records, Copilot messages, documentation and unrelated local changes must not enter the runtime commit
+- Commit/push is permitted only after this decision is recorded separately in `.ai_exchange/DECISIONS.md`
+
 ### DEC-APPROVED-010 — Fixed ModelPolicy execution-boundary RED test
 
 - Status: APPROVED
