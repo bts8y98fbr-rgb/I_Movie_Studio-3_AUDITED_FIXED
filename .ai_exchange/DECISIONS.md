@@ -6,6 +6,33 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Approved standing decisions
 
+### DEC-APPROVED-005 — Minimal provider identity production fix
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
+- Related decisions: `DEC-APPROVED-002`, `DEC-APPROVED-004`
+- Related Codex run: `CODEX-RUN-20260903-001`
+- Related Copilot review: `MSG-COPILOT-20260903-002`
+- Base commit: `b21853c`
+- Authorized stage: 1C — minimal provider identity production fix
+- Permitted production file: `core/movie_engine/generation_engine.py`
+- Permitted test file: `tests/test_provider_execution_identity.py`
+- Remove the hidden `PixVerse -> Video AI` alias
+- Remove the preliminary implicit `Video AI` fallback
+- Resolve the execution backend strictly by routed provider identity
+- If the routed backend is unavailable, raise an explicit error before creating or queuing `GenerationTask`
+- Preserve the existing identity test as a GREEN invariant
+- Add one narrow test in the same test file for explicit failure when the routed backend is unavailable
+- Do not register or integrate PixVerse
+- Do not modify ProviderManager, ProviderRegistry, Router classes, Provider contracts, ModelPolicy, UI, Reactive Orchestrator, documentation or other tests
+- Do not use network, live APIs, real credentials, `.env` or GUI
+- Targeted GREEN gate: exactly `2 passed`
+- Full regression gate: exactly `76 passed`, with no failures, skips or xfails
+- Existing unrelated dirty-working-tree changes must remain untouched
+- Codex must introduce changes only to the two permitted stage-1C files
+- After GREEN and verification, stop without commit or push
+
 ### DEC-APPROVED-004 — GO WITH CONDITIONS / Provider identity RED test
 
 - Status: APPROVED
