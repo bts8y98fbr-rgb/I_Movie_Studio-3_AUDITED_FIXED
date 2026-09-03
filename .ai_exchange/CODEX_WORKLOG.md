@@ -17,6 +17,80 @@
 
 ## Entries
 
+## CODEX-RUN-20260903-003
+
+- Mode: Codex desktop, read-only analysis before a Product Owner decision on the stage 1D production fix
+- Repository: local `I_Movie_Studio-3_AUDITED_FIXED`
+- Related decision: `DEC-APPROVED-008`
+- Analysis method: source inspection and local Python introspection only
+
+### Catalog and Registry identities
+
+- Default eligible video Catalog identities: `PixVerse`
+  - status: `active`
+  - media types: `["video"]`
+  - API available: `true`
+  - free API: `false`
+  - free credits: `true`
+  - free-mode eligible: `true`
+  - quality score: `8.5`
+  - speed score: `8.0`
+  - ranking total: `16.5`
+- Default registered execution backend identities: `Image AI`, `Video AI`, `Voice AI`, `Music AI`
+- Exact intersection of eligible default video Catalog identities and registered execution backend identities: empty set
+
+### Availability predicate simulation
+
+Simulated predicate:
+
+```python
+backend_available(name) = provider_manager.get(name) is not None
+```
+
+- `backend_available("PixVerse")` evaluated to `False`.
+- Filtered candidates: `PixVerse`.
+- Remaining candidates: none.
+- Simulated Router result after filtering before scoring: `None`.
+
+### ProviderManager.get(name) side effects
+
+- Actual call path: `ProviderManager.get(name) → ProviderRegistry.get(name) → self.providers.get(name)`.
+- Missing identities return `None`.
+- Registry keys were unchanged before and after lookup.
+- Registered provider object identities were unchanged before and after lookup.
+- No registration, lazy loading, network access, credential access, or other mutation occurs in the current implementation.
+- Therefore `provider_manager.get(name) is not None` is safe as a read-only availability predicate under the current contract; a separate `has`/`contains` contract is not required for the minimal fix, though it could make a future side-effect-free contract more explicit.
+
+### Compatibility with the current RED test
+
+- An availability-predicate fix would filter out `PixVerse` and make the default Router return `None`.
+- `tests/test_default_provider_routing_registry_consistency.py` would not become GREEN unchanged.
+- It would continue to fail at `assert routed_provider is not None` with `default Router returned no eligible video provider`.
+- The current test combines two distinct requirements:
+  1. consistency — Router must not return an identity without an execution backend;
+  2. availability — the default system must have at least one executable video backend.
+- Returning `None` is supported by the current Router contract and is a valid explicit-unavailability result, but it also proves that default generation remains unavailable.
+
+### Recommended future scope
+
+Minimal production scope:
+
+- `core/ai_core/providers/provider_router.py`: add an optional execution-availability predicate and apply it while building candidates, before scoring.
+- `core/movie_engine/generation_engine.py`: wire the predicate from the existing default `ProviderManager` without changing identity or adding fallback.
+
+Minimum test scope requires two distinct tests:
+
+1. A controlled filtering-before-scoring test where a higher-scoring unavailable candidate is excluded and a lower-scoring available candidate is selected; an all-unavailable case must produce `None`.
+2. The current default-wiring test retained as a separate operational availability gate, so default generation unavailability is not hidden.
+
+The predicate-only fix can satisfy consistency but cannot make the current availability gate GREEN because the Catalog/Registry intersection is empty. If Product Owner accepts `Router=None` as the completed-stage outcome, the current test must be explicitly redefined as consistency-only and GREEN must not be presented as proof that default generation is operational.
+
+### Scope and controls
+
+- No production code or tests were changed during this analysis.
+- No network, live API, credentials, `.env`, or GUI were used.
+- No provider registration, silent fallback, identity substitution, ModelPolicy change, or static removal of PixVerse was proposed or performed.
+
 ## CODEX-RUN-20260903-002
 
 - Mode: Codex desktop, stage 1D default Router/Registry consistency RED test

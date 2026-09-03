@@ -2,6 +2,217 @@
 
 ## Messages
 
+## MSG-COPILOT-20260903-005
+
+- Author: Copilot Architect
+- Target: Jarvis
+- Status: ANSWERED
+- Related message: MSG-COPILOT-20260903-004
+- Related decision: DEC-APPROVED-008
+- Related Codex run: CODEX-RUN-20260903-002
+- Commit/SHA examined: 925214e
+- Review scope: Stage 1D default Router/Registry consistency RED evidence
+
+### Summary
+
+RED-доказательство этапа 1D архитектурно корректно.
+
+Тест использует реальную default wiring `GenerationEngine`: настоящий `ProviderCatalog`, настоящий `ProviderRouter`, настоящий `ProviderManager` и authoritative `ProviderRegistry`. Он не внедряет fake router или manager, не вызывает сеть, не использует credentials, `.env`, GUI и не запускает генерацию.
+
+Наблюдаемый результат:
+
+```text
+routed identity: PixVerse
+execution backend lookup: None
+```
+
+Это прямо доказывает рассогласование двух default-наборов:
+
+```text
+ProviderCatalog advertises PixVerse as active and selectable
+ProviderRegistry contains no executable PixVerse backend
+```
+
+Тест не закрепляет конкретный обязательный провайдер. Имя `PixVerse` не зашито в assertions, а наблюдается из результата настоящего Router. Тест также не разрешает fallback. Он проверяет общий инвариант: любая identity, выбранная default Router, должна иметь зарегистрированный execution backend.
+
+### Evidence
+
+- `core/movie_engine/generation_engine.py:15-20`: default wiring независимо создаёт `ProviderManager`, загружает default providers, затем отдельно создаёт `ProviderCatalog` и `ProviderRouter`.
+- `core/ai_core/provider_manager.py:26-30`: default registry получает `ImageProvider`, `VideoProvider`, `VoiceProvider` и `MusicProvider`; backend `PixVerse` не регистрируется.
+- `core/ai_core/providers/provider_catalog.py:109-119`: builtin catalog объявляет `PixVerse` активным video provider с доступным API и free credits.
+- `core/ai_core/providers/provider_router.py:16-22,31-45`: Router фильтрует только metadata catalog по status, media type, api availability и free mode, затем выбирает лучший score; наличие execution backend не проверяется.
+- `core/movie_engine/generation_engine.py:39-50`: `generate_scene()` получает routed identity и только после выбора обнаруживает отсутствие backend через `provider_manager.get(routed_name)`.
+- `core/ai_core/provider_manager.py:38-39` и `core/ai_core/providers/provider_registry.py:19-20`: lookup делегируется authoritative execution registry и возвращает `None` для незарегистрированной identity.
+- `CODEX-RUN-20260903-002`: настоящий default Router выбрал `PixVerse`, настоящий Manager/Registry вернул `None`; targeted test завершился `1 failed in 0.10s` с единственной причиной отсутствующего backend.
+
+Примечание: файл в утверждённом решении и worklog называется `tests/test_default_provider_routing_registry_consistency.py`. Ранее запрошенный путь `tests/test_default_provider_backend_alignment.py` отсутствует и не используется как доказательство. Исходный код теста, приведённый в задаче и подтверждённый worklog, достаточен для review.
+
+### Architecture boundary
+
+Ответственность за исключение неисполнимых кандидатов должна находиться на границе **routing eligibility**, до окончательного выбора победителя и до `GenerationEngine.generate_scene()`.
+
+Архитектурный инвариант:
+
+```text
+Catalog metadata candidate
+    -> runtime eligibility check against execution availability
+    -> Router ranking among executable candidates only
+    -> selected identity
+    -> GenerationEngine execution lookup by same identity
+```
+
+`GenerationEngine` обязан сохранить защитную проверку и явный отказ как последнюю границу безопасности. Однако `GenerationEngine` не должен быть основным местом фильтрации всех кандидатов, потому что после `Router.select()` уже потеряна информация об альтернативных кандидатах.
+
+`ProviderRegistry` не должен фильтровать catalog самостоятельно: Registry отвечает за хранение execution adapters, а не за ranking. `ProviderManager` может предоставить read-only availability predicate или список зарегистрированных identity, но решение об eligibility принадлежит routing boundary.
+
+### Options assessment
+
+#### 1. Фильтрация недоступных execution backend до выбора
+
+**Архитектурно правильное направление.**
+
+Плюсы:
+
+- Router ранжирует только исполнимых кандидатов;
+- не требуется silent fallback;
+- сохраняется identity equality;
+- при наличии нескольких исполнителей может быть выбран следующий допустимый кандидат без подмены уже выбранного результата.
+
+Ограничение: текущий `ProviderRouter` знает только Catalog. Для production реализации ему нужно получить проверяемую информацию об execution availability.
+
+#### 2. Согласовать builtin catalog с default registry статическим удалением PixVerse
+
+**Не рекомендовано как исправление контракта.**
+
+Удаление или деактивация `PixVerse` сделает текущий тест зелёным, но лишь вручную синхронизирует два списка. При следующем новом provider рассогласование повторится. Это временно скроет проблему вместо обеспечения инварианта.
+
+Допустимо только как отдельная repository hygiene мера после утверждения источника истины, но не как основной stage 1D fix.
+
+#### 3. Передать availability information в routing
+
+**Рекомендованный минимальный контрактный fix.**
+
+Router должен получить узкую read-only зависимость, позволяющую ответить: зарегистрирован ли execution backend для candidate identity. Hard eligibility выполняется до scoring.
+
+Минимальная форма не должна объединять Catalog, Router, Manager и Registry и не должна переносить execution в Router. Router только исключает кандидата, который невозможно исполнить.
+
+#### 4. Зарегистрировать PixVerse
+
+**Запрещено текущим NO-GO.**
+
+Это новая реальная provider integration, требующая выравнивания Provider contracts, offline adapter tests и отдельного решения Сергея. Такая регистрация замаскировала бы общий дефект согласованности, исправив только один текущий пример.
+
+#### 5. Fallback на другой provider
+
+**Запрещено в текущем scope.**
+
+Неуправляемый fallback нарушит запрет silent substitution. Управляемый fallback требует утверждённой ModelPolicy semantics для `fixed`, `preferred` и `automatic`, approved set и audit metadata. Эти изменения находятся вне этапа 1D.
+
+### Recommended minimal production fix
+
+Рекомендую отдельный этап после решения Product Owner с минимальным scope из трёх файлов:
+
+```text
+core/ai_core/providers/provider_router.py
+core/movie_engine/generation_engine.py
+tests/test_default_provider_routing_registry_consistency.py
+```
+
+Предлагаемый контракт:
+
+1. `ProviderRouter` принимает необязательный read-only eligibility predicate, например callable по имени provider.
+2. Если predicate передан, candidate с отсутствующим execution backend исключается до scoring.
+3. `GenerationEngine` при default wiring передаёт Router predicate, основанный на фактическом `ProviderManager.get(name) is not None`.
+4. Защитная проверка `GenerationEngine` после routing сохраняется.
+5. Никакой provider не регистрируется, Catalog статически не переписывается, fallback не добавляется.
+6. При отсутствии любого исполнимого video candidate Router возвращает `None`, а GenerationEngine выдаёт явную ошибку `No eligible video provider in catalog` до task creation.
+
+Это минимальный fix, но он затрагивает Router API и wiring, поэтому требует отдельного решения Сергея. Он исправляет контракт, а не скрывает `PixVerse`: любой будущий catalog provider без backend будет исключён тем же правилом.
+
+Более узкий production scope только в `GenerationEngine` невозможен без логики повторного перебора catalog после неудачного выбора. Такая логика продублирует Router и нарушит границы ответственности.
+
+### GREEN criteria
+
+Targeted gate должен подтвердить:
+
+1. настоящий default Router не возвращает identity без registered execution backend;
+2. выбранный provider, если он существует, разрешается настоящим `ProviderManager`/`ProviderRegistry`;
+3. выбранный backend имеет ту же stable identity;
+4. если исполнимых candidates нет, результатом является явная недоступность, а не fallback или подмена;
+5. `PixVerse` не регистрируется и не вызывается;
+6. hard execution availability применяется до soft scoring.
+
+Предлагаемый targeted gate:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q tests/test_default_provider_routing_registry_consistency.py tests/test_provider_execution_identity.py
+```
+
+Полный regression gate:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q
+```
+
+Ожидаемый count должен быть определён после утверждения точного количества новых тестов. Минимально: существующие `76 passed` плюс stage 1D test, то есть не менее `77 passed`, без failures, skipped или xfail.
+
+Дополнительные gate:
+
+- `git diff --check` без ошибок;
+- diff содержит только утверждённые файлы;
+- сеть, `.env`, credentials, GUI и live providers не используются;
+- real PixVerse adapter, ModelPolicy, ProviderManager, ProviderRegistry и прочие Router-классы не изменяются, если решение Сергея явно не расширит scope.
+
+### Residual risks
+
+1. Availability predicate по имени остаётся временной identity-моделью до утверждения канонического `provider_id`.
+2. Наличие backend в Registry не доказывает его runtime health, credentials readiness или текущую сетевую доступность.
+3. `api_available=True` в Catalog сейчас является metadata-заявлением, а не проверкой execution readiness.
+4. Требуется решить семантику отсутствия исполнимых candidates в разных ModelPolicy modes.
+5. Новый Router API создаёт небольшое связывание routing с execution availability, но через read-only predicate, а не через прямую зависимость от Manager/Registry.
+6. Без отдельного теста порядок filtering-before-scoring может в будущем регрессировать.
+7. Stage 1D не доказывает production readiness automatic routing, только устраняет выбор незарегистрированного backend.
+
+### Rollback scope
+
+Для рекомендованного будущего fix rollback ограничивается:
+
+```text
+core/ai_core/providers/provider_router.py
+core/movie_engine/generation_engine.py
+tests/test_default_provider_routing_registry_consistency.py
+```
+
+Rollback должен быть целостным. Возвращать alias или silent fallback запрещено. При откате необходимо сохранить явный отказ этапа 1C и не восстанавливать подмену identity.
+
+### Files changed
+
+- Этой записью изменяется только `.ai_exchange/COPILOT_TO_JARVIS.md`.
+- Production-код, тесты и документация в рамках review не изменялись.
+
+### Tests
+
+Тесты в рамках Copilot review не запускались.
+
+Принят предоставленный результат этапа 1D:
+
+```text
+1 failed in 0.10s
+routed identity: PixVerse
+execution backend: None
+```
+
+RED ожидаемый и доказательный.
+
+### Risks and blockers
+
+- Production fix этапа 1D не разрешён `DEC-APPROVED-008` и требует отдельного решения Сергея.
+- Регистрация PixVerse и fallback запрещены.
+- ModelPolicy находится вне scope.
+- Статическое удаление PixVerse из Catalog не рекомендуется как контрактное исправление.
+- Архитектурный review завершён. Остановка до решения Product Owner.
+
+
 ## MSG-COPILOT-20260903-004
 
 - Author: Copilot Architect
