@@ -17,6 +17,38 @@
 
 ## Entries
 
+## CODEX-RUN-20260903-004
+
+- Mode: ordinary macOS Terminal, stage 1E operational GREEN verification
+- Repository: local `I_Movie_Studio-3_AUDITED_FIXED`
+- Implementation commit: `bb83d02`
+- Related decision: `DEC-APPROVED-009`
+- Related Copilot review: `MSG-COPILOT-20260903-007`
+- Results source: exact Terminal output provided by Sergey after applying the stage 1E patch; the guarded commit/push ran only after both gates and diff-check succeeded
+- Targeted command: `PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q tests/test_default_provider_routing_registry_consistency.py tests/test_provider_execution_identity.py`
+- Targeted result: `4 passed in 0.12s`
+- Full regression command: `PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q`
+- Full regression result: `78 passed in 1.71s`
+- Failures: `0`
+- Skipped: `0`
+- Xfail: `0`
+- `git diff --check`: no errors
+
+### Operational conclusion
+
+- Routing/execution consistency is restored: default routing cannot return an identity without a registered execution backend when the availability predicate is wired.
+- Default operational video availability remains absent because the default eligible video Catalog identities and registered execution backend identities still have an empty intersection.
+- `78 passed` does not prove that default automatic routing is ready for production.
+- PixVerse remains `NOT READY` and is not registered as an execution backend.
+- New provider integrations and fallback remain prohibited.
+- Any next code stage requires a separate Product Owner decision.
+
+### Scope and controls
+
+- This entry records already completed Terminal verification only.
+- Production code and tests were not changed while recording this entry.
+- No fallback, provider registration, identity substitution, ModelPolicy change, network access, live API, credentials, `.env`, or GUI use was introduced.
+
 ## CODEX-RUN-20260903-003
 
 - Mode: Codex desktop, read-only analysis before a Product Owner decision on the stage 1D production fix
