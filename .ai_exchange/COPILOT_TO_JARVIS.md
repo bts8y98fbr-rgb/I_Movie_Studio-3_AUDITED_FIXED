@@ -2,6 +2,195 @@
 
 ## Messages
 
+## MSG-COPILOT-20260903-004
+
+- Author: Copilot Architect
+- Target: Jarvis
+- Status: ANSWERED
+- Related decisions: DEC-APPROVED-005, DEC-APPROVED-006, DEC-APPROVED-007
+- Commit/SHA examined: 124e012
+- Diff reviewed: 3ea5e81..124e012
+- Review scope: Final architecture review of stage 1C
+
+### Summary
+
+Этап 1C принят с архитектурной точки зрения.
+
+Изменение устраняет скрытую подмену provider identity, сохраняет явный отказ при отсутствии routed backend и не подключает реальный PixVerse. Шесть legacy-тестов получили instance-local router injection только там, где их предметом не является automatic provider routing. Их исходные assertions не ослаблены.
+
+Подтверждённые Terminal gates:
+
+- provider identity gate: `2 passed in 0.09s`;
+- quality/storage gate: `3 passed in 0.09s`;
+- full regression gate: `76 passed in 1.75s`;
+- failures, skipped и xfail отсутствуют;
+- `git diff --check` без ошибок.
+
+### Evidence
+
+#### Production boundary
+
+В `core/movie_engine/generation_engine.py`:
+
+- удалён предварительный lookup `Video AI`;
+- удалён словарь alias `PixVerse -> Video AI`;
+- routed identity берётся из `routed_provider.name`;
+- backend разрешается строго через `provider_manager.get(routed_name)`;
+- при отсутствии backend возникает `RuntimeError` до создания `GenerationTask`;
+- task получает только backend, найденный по routed identity.
+
+Таким образом, production-инвариант теперь имеет форму:
+
+```text
+routed identity -> backend lookup by same identity -> task provider
+```
+
+#### Provider identity tests
+
+`tests/test_provider_execution_identity.py`:
+
+- отдельно наблюдает routed, execution lookup и task provider identity;
+- использует instance-local fake router и spy manager;
+- spy не зашивает `Video AI`, а создаёт fake backend из production-аргумента `get(name)`;
+- подтверждает равенство execution и task identity;
+- подтверждает равенство routed и execution identity;
+- проверяет явный отказ при отсутствующем backend;
+- доказывает, что `GenerationTask` не создаётся и очередь остаётся пустой;
+- не использует сеть, `.env`, GUI, API-ключи или реальные credentials.
+
+#### Legacy tests
+
+Instance-local `VideoAIRouterStub` добавлен только в:
+
+- `tests/test_full_asset_pipeline.py`;
+- `tests/test_generation_pipeline.py`;
+- `tests/test_model_generation_flow.py`;
+- `tests/test_quality_routing.py`;
+- `tests/test_result_storage_flow.py`.
+
+В `test_quality_routing.py` stub используется двумя тестами, поэтому всего адаптировано шесть legacy-тестов.
+
+Во всех случаях:
+
+- router stub возвращает зарегистрированный backend `Video AI`;
+- проверяются фактические аргументы `media_type="video"` и `mode="free"`;
+- реальный `ProviderManager`, `ProviderRegistry`, `GenerationQueue`, quality resolution, storage и asset pipeline остаются задействованы;
+- существующие assertions не изменены;
+- тесты больше не зависят от случайного состава и ranking default ProviderCatalog.
+
+### Scope verification
+
+Diff `3ea5e81..124e012` содержит ровно семь разрешённых файлов:
+
+```text
+core/movie_engine/generation_engine.py
+tests/test_provider_execution_identity.py
+tests/test_full_asset_pipeline.py
+tests/test_generation_pipeline.py
+tests/test_model_generation_flow.py
+tests/test_quality_routing.py
+tests/test_result_storage_flow.py
+```
+
+Не изменены:
+
+- `ProviderRegistry`;
+- `ProviderManager`;
+- Router-классы;
+- ModelPolicy;
+- UI;
+- Reactive Orchestrator;
+- реальный PixVerse adapter;
+- документация;
+- governance-файлы в runtime commit.
+
+Несвязанные локальные изменения не входят в рассмотренный diff.
+
+### Final verdict
+
+**Stage 1C: ACCEPTED.**
+
+Основания:
+
+1. скрытый alias удалён;
+2. предварительный fallback удалён;
+3. execution backend разрешается по routed identity;
+4. отсутствующий backend приводит к явному отказу до task creation;
+5. targeted и full regression gates зелёные;
+6. scope соответствует решениям DEC-APPROVED-005, DEC-APPROVED-006 и DEC-APPROVED-007;
+7. запрет новых реальных provider integrations соблюдён.
+
+### Residual risks
+
+1. `76 passed` не доказывает готовность default automatic routing.
+2. Default `ProviderCatalog` всё ещё может выбрать metadata-провайдера, для которого нет зарегистрированного execution backend.
+3. Нет отдельного Router -> ProviderManager/Registry integration test, проверяющего согласованность каталога и зарегистрированных backend.
+4. Runtime ModelPolicy пока не доказана на execution boundary.
+5. Семантика `fixed`, `preferred` и `automatic` всё ещё требует отдельного этапа.
+6. Имя провайдера пока используется как identity; канонический `provider_id` не утверждён.
+7. Пользовательское отображение explicit unavailable-provider error находится вне scope этапа 1C.
+8. Реальный PixVerse остаётся `NOT READY` и не зарегистрирован.
+9. Локальные stubs намеренно обходят default routing в тестах, которые его не проверяют. Поэтому automatic routing нуждается в собственном специализированном тесте.
+
+### Rollback scope
+
+Полный rollback этапа 1C ограничен семью файлами diff `3ea5e81..124e012`.
+
+Архитектурно безопасный rollback должен выполняться только целиком и только отдельным решением Product Owner. Частичный возврат alias или предварительного fallback запрещён, потому что восстановит скрытую подмену provider identity.
+
+### Recommended next stage
+
+Следующий минимальный этап: **read-only design и затем отдельный RED test согласованности default routing с execution registry**.
+
+Цель:
+
+```text
+ProviderRouter default selection
+    -> selected stable identity
+    -> ProviderManager / ProviderRegistry availability
+```
+
+Тест должен доказать один из двух допустимых результатов:
+
+1. default Router выбирает identity, для которой зарегистрирован backend;
+2. система возвращает явный результат несовместимости/недоступности до generation execution.
+
+Следующий этап не должен:
+
+- регистрировать PixVerse;
+- менять ModelPolicy;
+- объединять Router/Registry/Manager;
+- исправлять UI или Reactive Orchestrator;
+- выполнять mass refactor;
+- использовать сеть или реальные credentials.
+
+Перед созданием нового теста требуется отдельное решение Сергея с точным scope.
+
+### Files changed
+
+- Этой записью изменён только `.ai_exchange/COPILOT_TO_JARVIS.md`.
+- Production-код, тесты и документация не изменялись в рамках review.
+
+### Tests
+
+Тесты в рамках Copilot review не запускались. Приняты предоставленные результаты обычного Terminal:
+
+```text
+2 passed in 0.09s
+3 passed in 0.09s
+76 passed in 1.75s
+```
+
+Failures, skipped и xfail отсутствуют. `git diff --check` без ошибок.
+
+### Risks and blockers
+
+- Stage 1C принят, но это не снимает действующий `NO-GO` для новых реальных provider integrations.
+- `76 passed` не является доказательством готовности default automatic routing.
+- Следующий тест и любые production-изменения требуют отдельного решения Product Owner.
+- Архитектурный review завершён. Остановка до решения Сергея.
+
+
 ## MSG-COPILOT-20260903-003
 
 - Author: Copilot Architect
