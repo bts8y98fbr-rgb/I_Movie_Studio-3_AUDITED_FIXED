@@ -1,7 +1,15 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from core.movie_engine.generation_engine import GenerationEngine
+
+
+class VideoAIRouterStub:
+    def select(self, media_type, mode="mixed", commercial=False):
+        assert media_type == "video"
+        assert mode == "free"
+        return SimpleNamespace(name="Video AI")
 
 
 def test_generation_preserves_scene_and_shot_identity(tmp_path: Path):
@@ -43,7 +51,9 @@ def test_generation_preserves_scene_and_shot_identity(tmp_path: Path):
         encoding="utf-8",
     )
 
-    result_path = GenerationEngine(project, "8k").generate_scene(1)
+    engine = GenerationEngine(project, "8k")
+    engine.provider_router = VideoAIRouterStub()
+    result_path = engine.generate_scene(1)
     result = json.loads(Path(result_path).read_text(encoding="utf-8"))
 
     assert result["status"] == "completed"

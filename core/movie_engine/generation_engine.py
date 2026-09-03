@@ -34,27 +34,15 @@ class GenerationEngine:
         render_plan = json.loads(
             render_plan_path.read_text(encoding="utf-8")
         )
-        # Route the task through the new catalog first. At this stage the
-        # selected catalog entry is metadata only; execution still uses
-        # the compatible legacy provider instance.
+        # Route the task through the catalog and preserve that provider
+        # identity at the execution boundary.
         routed_provider = self.provider_router.select("video", mode="free")
-        video_provider = self.provider_manager.get("Video AI")
 
         if routed_provider is None:
             raise RuntimeError("No eligible video provider in catalog")
 
-        # Resolve the catalog selection to a concrete execution backend.
-        # Until concrete provider adapters are registered, retain the
-        # legacy Video AI backend as a safe execution fallback.
         routed_name = routed_provider.name
-        provider_aliases = {
-            "PixVerse": "Video AI",
-        }
-        execution_name = provider_aliases.get(routed_name, routed_name)
-        resolved_provider = self.provider_manager.get(execution_name)
-
-        if resolved_provider is not None:
-            video_provider = resolved_provider
+        video_provider = self.provider_manager.get(routed_name)
 
         if video_provider is None:
             raise RuntimeError(

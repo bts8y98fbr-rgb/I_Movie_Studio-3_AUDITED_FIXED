@@ -1,5 +1,14 @@
+from types import SimpleNamespace
+
 from core.ai_core.quality_policy import QualityPolicy
 from core.ai_core.model_router import ModelRouter
+
+
+class VideoAIRouterStub:
+    def select(self, media_type, mode="mixed", commercial=False):
+        assert media_type == "video"
+        assert mode == "free"
+        return SimpleNamespace(name="Video AI")
 
 
 def test_production_defaults_are_4k_60_hdr_10bit():
@@ -171,6 +180,7 @@ def test_generation_engine_resolves_quality_for_video_provider(tmp_path):
         project_path=tmp_path,
         quality="8k",
     )
+    engine.provider_router = VideoAIRouterStub()
 
     output = engine.generate_scene(1)
     result = engine.load_result(1)
@@ -217,6 +227,7 @@ def test_generation_engine_passes_resolved_quality_to_video_provider(tmp_path):
         project_path=tmp_path,
         quality="8k",
     )
+    engine.provider_router = VideoAIRouterStub()
 
     provider = engine.provider_manager.get("Video AI")
 

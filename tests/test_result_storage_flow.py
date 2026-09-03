@@ -1,4 +1,12 @@
 import json
+from types import SimpleNamespace
+
+
+class VideoAIRouterStub:
+    def select(self, media_type, mode="mixed", commercial=False):
+        assert media_type == "video"
+        assert mode == "free"
+        return SimpleNamespace(name="Video AI")
 
 
 def test_generation_queue_saves_result_through_storage(tmp_path):
@@ -44,6 +52,7 @@ def test_generation_queue_saves_result_through_storage(tmp_path):
         project_path=tmp_path,
         quality="8k",
     )
+    engine.provider_router = VideoAIRouterStub()
 
 
     engine.generate_scene(1)
