@@ -9,9 +9,15 @@ from core.ai_core.quality_policy import QualityPolicy
 
 
 class GenerationEngine:
-    def __init__(self, project_path="projects/test_movie", quality="4k"):
+    def __init__(
+        self,
+        project_path="projects/test_movie",
+        quality="4k",
+        model_policy=None,
+    ):
         self.project_path = Path(project_path)
         self.quality = quality
+        self.model_policy = model_policy
         self.provider_manager = ProviderManager()
         self.provider_manager.load_default_providers()
         # New provider-routing layer. The legacy ProviderManager remains
@@ -105,6 +111,7 @@ class GenerationEngine:
                 quality=self.quality,
                 project_path=self.project_path,
                 metadata=metadata,
+                model_policy=self.model_policy,
             )
             self.queue.add_task(task)
 
