@@ -6,6 +6,48 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Approved standing decisions
 
+### DEC-APPROVED-012 — GenerationEngine fixed ModelPolicy propagation RED test
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
+- Base commit: `9d293b9`
+- Related decision: `DEC-APPROVED-011`
+- Related audit: `CODEX-RUN-20260903-006`
+- Authorized stage: 2C — one hermetic RED test proving fixed ModelPolicy propagation through GenerationEngine
+- Permitted test file only:
+  - `tests/test_generation_engine_model_policy_propagation.py`
+- Permitted governance worklog:
+  - `.ai_exchange/CODEX_WORKLOG.md`
+- Production code and existing tests must not be changed
+- The test must use:
+  - canonical `core.ai_core.model_policy.ModelPolicy`;
+  - `SelectionMode.FIXED`;
+  - actual `GenerationEngine`;
+  - actual `GenerationTask`;
+  - actual `GenerationQueue`
+- The canonical policy may be attached to the GenerationEngine instance as the proposed propagation boundary
+- The render plan must contain one shot using the flat execution-boundary schema:
+  - `shot_model_selection["selected_model"]["name"]`
+- A deliberate fixed model mismatch must be used
+- Instance-local routing to the already registered `Video AI` backend is permitted because provider routing is not the subject of this test
+- A local spy may observe calls to the registered execution backend
+- `ProviderManager` and `ProviderRegistry` must not be replaced
+- Expected contract:
+  - the created task carries the identical canonical policy object;
+  - the mismatch is refused by `GenerationQueue`;
+  - `provider.generate()` receives zero calls
+- Expected RED:
+  - `GenerationEngine` omits `model_policy` while creating `GenerationTask`;
+  - the task receives `None`;
+  - provider generation is called instead of being refused
+- Stop after the expected RED
+- Do not run the full regression suite during the RED stage
+- UI, persistence, MoviePipeline, ModelPolicy semantics, selected-model schema normalization, Router, Registry, ProviderManager, PixVerse, fallback and Reactive Orchestrator are outside scope
+- Network, live APIs, credentials, `.env` and GUI are prohibited
+- Existing unrelated dirty-working-tree changes must remain untouched
+- Any production fix requires a separate Product Owner decision
+
 ### DEC-APPROVED-011 — Minimal fixed ModelPolicy execution-boundary production fix
 
 - Status: APPROVED
