@@ -17,6 +17,282 @@
 
 ## Entries
 
+## CODEX-RUN-20260903-008
+
+- Mode: Codex desktop, read-only selected-model schema propagation audit with isolated governance recording
+- Repository: local `I_Movie_Studio-3_AUDITED_FIXED`
+- Base commit: `28711f20046f54c513356bc7344efef2adde02d0`
+- Examined HEAD: `28711f20046f54c513356bc7344efef2adde02d0`
+- Examined `origin/main`: `28711f20046f54c513356bc7344efef2adde02d0` after `git fetch origin main`; divergence `0/0`
+- Scope: read-only trace of `ModelRouter → ShotModelSelector → ShotRenderer/render plan → GenerationEngine → GenerationTask → GenerationQueue → provider/result/storage/render consumers`
+- Architecture verdict: DOUBLE NESTING CONFIRMED; the production producer emits a schema incompatible with the fixed-policy consumer and with the flat model descriptor expected by reporting contracts
+
+### Stage 2C verification
+
+- `DEC-APPROVED-013` is present in `.ai_exchange/DECISIONS.md`.
+- Runtime commit `28711f2` contains exactly:
+  - `core/movie_engine/generation_engine.py`
+  - `tests/test_generation_engine_model_policy_propagation.py`
+- `GenerationEngine.__init__()` accepts optional `model_policy=None`, preserves the supplied object as `self.model_policy`, and passes the identical reference to every `GenerationTask` it creates.
+- The propagation test is tracked and contains the approved fixed mismatch and exact-match contracts.
+- This audit did not rerun pytest; the accepted Stage 2C gates remain `2 passed` targeted and `82 passed` full regression.
+
+### Actual producer-to-consumer schema map
+
+#### 1. ModelRouter produces a coherent routing wrapper
+
+- `core/ai_core/model_router.py:70-103` selects one model descriptor and resolves quality.
+- `core/ai_core/model_router.py:105-114` returns:
+
+```text
+{
+  status,
+  selected_model: {
+    name, type, quality, motion, realism, detail, profiles,
+    resolutions, fps, hdr, color_depth
+  },
+  shot_profile,
+  requested_quality,
+  actual_quality,
+  fallback_applied,
+  notification,
+  time
+}
+```
+
+- Actual structure: `model_result["selected_model"]["name"]` is the stable model identity.
+- Expected structure at this boundary: the wrapper above; no mismatch exists inside `ModelRouter`.
+- Architectural consequence: the wrapper and the selected model descriptor are distinct concepts and must not both be named `selected_model` at successive levels.
+
+#### 2. ShotModelSelector introduces the first schema break
+
+- `core/ai_core/shot_model_selector.py:41-60` creates shot context and obtains the complete `model_result` wrapper.
+- `core/ai_core/shot_model_selector.py:63-92` returns its own shot-selection envelope but assigns `"selected_model": model_result` at lines 89-90.
+- Actual structure becomes:
+
+```text
+shot_model_selection.selected_model.selected_model.name
+```
+
+- Expected downstream structure is:
+
+```text
+shot_model_selection.selected_model.name
+```
+
+- In-memory production introspection confirmed:
+  - selector `selected_model` keys are `status`, `selected_model`, `shot_profile`, `requested_quality`, `actual_quality`, `fallback_applied`, `notification`, `time`;
+  - actual identity path resolves at `selected_model.selected_model.name`;
+  - `selected_model.get("name")` returns `None`.
+- Architectural consequence: the first proven producer break is `ShotModelSelector.select_for_shot()`, not `ModelRouter` and not `GenerationQueue`.
+
+#### 3. ShotRenderer serializes the broken value verbatim
+
+- `core/movie_engine/shot_renderer.py:35-38` obtains `shot_model` from the real selector.
+- `core/movie_engine/shot_renderer.py:39-53` writes the unchanged object as each shot's `shot_model_selection`.
+- `core/movie_engine/shot_renderer.py:55-74` serializes it into `render_plan.json` without schema validation or versioning.
+- Actual render-plan path is therefore `shots[].shot_model_selection.selected_model.selected_model.name`.
+- Expected render-plan path is `shots[].shot_model_selection.selected_model.name`.
+- Architectural consequence: `ShotRenderer` is the natural owner of the versioned render-plan envelope and should validate the canonical schema before persistence, but it is not the origin of the malformed selection object.
+
+#### 4. GenerationEngine and GenerationTask preserve the value
+
+- `core/movie_engine/generation_engine.py:45-47` reads the render plan as JSON.
+- `core/movie_engine/generation_engine.py:91-105` copies `shot["shot_model_selection"]` unchanged into task metadata.
+- `core/movie_engine/generation_engine.py:107-116` creates the real `GenerationTask` and now propagates `model_policy` after Stage 2C.
+- `core/ai_core/generation_queue.py:11-35` copies the metadata dictionary shallowly and preserves the policy reference.
+- Actual and expected behavior at these boundaries is pass-through; neither module creates the double nesting.
+- Architectural consequence: normalization here would conceal an upstream schema defect unless implemented as an explicit, versioned legacy compatibility adapter.
+
+#### 5. GenerationQueue consumes a flat descriptor but passes the outer envelope to the provider
+
+- `core/ai_core/generation_queue.py:84-95` reads `shot_model_selection` and assigns `selected_model = shot_model_selection.get("selected_model", {})`.
+- `core/ai_core/generation_queue.py:97-123` reads fixed-policy identity as `selected_model.get("name")`.
+- With production selector output, `selected_model` is the ModelRouter wrapper, so `selected_model_name` is `None`.
+- `core/ai_core/generation_queue.py:125-135` records that wrapper, not the model descriptor, as audit `model_selection.model` for policy-less tasks.
+- `core/ai_core/generation_queue.py:137-143` passes the complete outer `shot_model_selection` envelope as `provider.generate(model=...)`.
+- `core/ai_core/generation_queue.py:150-164` uses the one-level `selected_model` value as fallback for `task.result["model"]` and `task.result["metadata"]["selected_model"]` only when the provider did not already set them.
+- Architectural consequence: Queue has two inconsistent notions of model data: it expects a flat descriptor for identity/audit/result fallback, but sends the entire selection envelope to the backend.
+
+#### 6. VideoProvider and storage preserve the wrong shape
+
+- `core/ai_core/providers/video/video_provider.py:56-70` reads `kwargs["model"]` without interpreting or flattening it.
+- `core/ai_core/providers/video/video_provider.py:134-147` stores the complete argument as `result["model"]`.
+- `core/ai_core/providers/video/video_provider.py:152-187` stores the same complete argument as `result.metadata.selected_model`, while also retaining original `metadata.shot_model_selection`.
+- `core/ai_core/result_storage.py:39-74` obtains the original task metadata and selection envelope.
+- `core/ai_core/result_storage.py:77-103` and `133-168` persist that envelope as asset/registry `model`, full metadata, and result.
+- `core/ai_core/asset_registry.py:67-112` preserves `asset["model"]` verbatim; registration/versioning serializes it without normalization.
+- Architectural consequence: policy-less production generation succeeds but propagates the malformed nested schema into provider manifests, task results, asset files, registry records, and versions.
+
+#### 7. Reload, report, compile, and export consumers
+
+- `core/movie_engine/project_dashboard.py:56-92` and `core/movie_engine/project_report.py:50-104` expect `asset["model"]["name"]`.
+- A production-nested asset model has no top-level `name`, so model aggregation silently omits it.
+- `render/render_pipeline.py:66-77,95-154` carries task/result metadata through render results but does not inspect or flatten model identity.
+- `core/movie_engine/movie_compiler.py:50-95,149-177` carries result assets into the compiled movie and reads quality/timeline, not model identity.
+- `core/movie_engine/export_pipeline.py:41-96` builds tracks without inspecting model identity.
+- No reload/compile/export consumer performs silent flattening. The malformed shape is retained where data is copied and ignored where model identity is not required.
+
+### Flat and nested test contracts
+
+- Flat canonical model descriptors are used by:
+  - `tests/test_quality_routing.py:60-72,93-100` for `ModelRouter` results;
+  - `tests/test_runtime_model_policy_boundary.py:23-33` for Queue fixed-policy identity;
+  - `tests/test_generation_engine_model_policy_propagation.py:21-46` for Stage 2C propagation;
+  - `tests/test_model_generation_flow.py:21-47` for a hand-authored render plan;
+  - `tests/test_result_storage_versions.py:23-31` for storage input;
+  - `tests/test_asset_metadata_enrichment.py:11-26,78-90`, `tests/test_project_dashboard.py:13-23,62-68`, and `tests/test_project_report.py:12-35,73-77` for registry/report contracts.
+- The nested wrapper is explicitly assumed by `tests/test_shot_model_selection.py:18-32,46-60,74-88`, which checks `result["selected_model"]["shot_profile"]` rather than a descriptor name.
+- No existing test covers the real `ShotRenderer → render plan → GenerationEngine → fixed Queue` schema path.
+- Architectural consequence: current green tests validate two mutually incompatible schemas because hand-authored plans are flat while the production plan producer is nested.
+
+### Wrapper fields and duplication
+
+- The ModelRouter wrapper contains `status`, `requested_quality`, `actual_quality`, `fallback_applied`, `notification`, `shot_profile`, and `time` (`model_router.py:105-114`).
+- ShotModelSelector already duplicates `shot_profile` at its top level and inside `shot_context` (`shot_model_selector.py:63-90`).
+- ShotRenderer separately writes preset quality into each shot and render settings (`shot_renderer.py:39-64`).
+- GenerationEngine independently resolves backend quality and stores `requested_quality`, `actual_quality`, `fallback_applied`, and `quality_notification` in task metadata (`generation_engine.py:71-105`).
+- No downstream production consumer reads the nested ModelRouter wrapper quality fields today; direct ModelRouter tests do validate them.
+- Bare flattening in ShotModelSelector would remove the only serialized copy of the ModelRouter wrapper fields from render plans. Although those fields are currently duplicated or unused downstream, discarding them silently is an information-loss risk. A future fix should explicitly preserve approved routing diagnostics as sibling metadata or deliberately version/remove them by contract.
+
+### Runtime consequences
+
+#### Policy-less task
+
+- Policy enforcement is skipped because `task.model_policy` is `None`.
+- Audit receives the ModelRouter wrapper as `model`, not the descriptor.
+- Provider receives the entire ShotModelSelector envelope as its `model` argument.
+- VideoProvider, result fallback/storage, registry, and version files preserve nested data without validation.
+- Generation can report success despite semantically malformed model metadata.
+
+#### Fixed exact or mismatch policy
+
+- For any production-generated nested selection, Queue reads `selected_model_name=None`.
+- An exact fixed provider/model choice is falsely rejected before audit and provider execution.
+- A true model mismatch is also rejected, but the error reports selected model `None`, hiding the actual selected identity one level deeper.
+- Thus fixed enforcement remains safe against unauthorized execution but cannot distinguish an actual mismatch from the schema mismatch.
+
+#### Audit, provider, result, and asset consequences
+
+- Fixed rejection prevents the `model_selection` audit and provider call, then creates a failed task result without model metadata.
+- Policy-less execution records the wrapper in audit, sends the outer envelope to the provider, and persists multiple copies of the malformed structure.
+- `ProjectDashboard` and `ProjectReport` expect a top-level descriptor name and silently fail to count nested production models.
+- Render/compile/export preserve or ignore the malformed model data; none repairs it.
+
+#### Existing render-plan compatibility
+
+- Existing flat hand-authored render plans remain compatible with Queue fixed enforcement.
+- Existing production-generated nested render plans remain usable only for policy-less execution and retain malformed metadata.
+- After a producer-only flattening fix, old nested plans would still falsely fail fixed policy unless explicitly migrated, rejected with a schema-version error, or handled by a separately approved compatibility boundary.
+- No current render-plan schema version or migration contract exists.
+
+### Architecture options
+
+#### Option A — fix ShotModelSelector producer
+
+Proposed core change: `selected_model = model_result["selected_model"]`.
+
+- Source of truth: strongest; fixes the first producer that mislabels a routing wrapper as a model descriptor.
+- Blast radius: narrow production change, but existing `tests/test_shot_model_selection.py` encodes the old nested contract and must be updated in a separately approved fix stage.
+- Backward compatibility: new plans become canonical; already persisted nested plans remain incompatible with fixed policies.
+- Defect visibility: does not hide the upstream problem.
+- Audit/provider/result impact: new data becomes flat and aligns with Queue/reporting identity expectations.
+- Information risk: bare replacement drops wrapper status/quality/notification fields from selector output unless they are preserved explicitly as sibling routing metadata.
+- Migration need: decide schema versioning or an explicit legacy-plan policy; do not silently reinterpret identities.
+- Minimum test scope: one new end-to-end schema contract test plus updates to the existing selector tests that currently require nesting.
+- Verdict: RECOMMENDED, with explicit preservation/versioning decision for useful wrapper diagnostics.
+
+#### Option B — normalize in ShotRenderer orchestration
+
+- Source of truth: render-plan serializer can enforce its persisted schema, but the selector continues returning a misleading internal contract.
+- Blast radius: localized to plan construction and its tests.
+- Backward compatibility: new plans can be flat; existing plans are unchanged and still require migration handling.
+- Defect visibility: partially hides the selector defect at serialization time.
+- Audit/provider/result impact: good for newly generated plans if all relevant wrapper fields are deliberately remapped.
+- Information risk: ad hoc extraction can discard routing diagnostics or duplicate quality data inconsistently.
+- Migration need: same legacy-plan/versioning issue as Option A.
+- Minimum test scope: ShotRenderer schema test and end-to-end Queue fixed-policy test.
+- Verdict: acceptable only as a schema-validation/serialization gate after the selector contract is made explicit; not preferred as the sole fix.
+
+#### Option C — make GenerationQueue accept both structures
+
+- Source of truth: weakest; a shared execution consumer would own compatibility for malformed producer data.
+- Blast radius: affects every queued task and policy/audit/result path.
+- Backward compatibility: highest for old flat and nested plans.
+- Defect visibility: high risk of permanently hiding the producer contract defect.
+- Audit/provider/result impact: identity lookup alone could become green while provider/audit/storage still receive wrappers; full normalization would broaden Queue responsibilities and silently rewrite persisted semantics.
+- Migration need: can act as an explicitly temporary, version-aware compatibility adapter, but no version marker exists today.
+- Minimum test scope: flat, nested legacy, malformed, fixed exact/mismatch, audit, provider argument, result metadata, and storage regression tests.
+- Verdict: NOT RECOMMENDED as the primary fix; consider only under a separate explicit backward-compatibility decision.
+
+### Recommended authoritative schema and ownership
+
+Canonical model identity in every render-plan shot should be:
+
+```text
+shot_model_selection.selected_model.name: string
+```
+
+- `selected_model` must be the model descriptor, never the `ModelRouter` result wrapper.
+- `ShotModelSelector` should own the canonical `shot_model_selection` value contract because it composes that object and introduces the current break.
+- `ShotRenderer` should own render-plan envelope versioning/validation and refuse or explicitly migrate noncanonical persisted shapes under a separately approved compatibility policy.
+- Useful routing diagnostics should be preserved as clearly named sibling metadata rather than nested under `selected_model`.
+
+### Recommended minimal next RED stage
+
+- New test file: `tests/test_selected_model_schema_contract.py`
+- Exact count: one hermetic end-to-end contract test.
+- Real production classes:
+  - `QualityPolicy`, `ModelRouter`, `ShotModelSelector`, and `ShotRenderer` as producers;
+  - `GenerationEngine`, `GenerationTask`, and `GenerationQueue` as transfer/consumer path;
+  - real default `ProviderManager` and `ProviderRegistry` with registered `Video AI` backend.
+- Permitted local controls:
+  - constrain the real `ModelRouter` instance to one deterministic model descriptor named `requested-model`;
+  - instance-local provider router stub returning the registered backend identity, because provider routing is not under test;
+  - replace only that backend instance's `generate()` with a no-I/O call spy.
+- Input: one temporary storyboard shot whose real `ShotRenderer.create_render_plan()` produces the render plan; canonical fixed policy requests the same backend and `requested-model`.
+- Expected canonical structure: `shots[0]["shot_model_selection"]["selected_model"]["name"] == "requested-model"`.
+- Actual current structure: identity exists only at `shots[0]["shot_model_selection"]["selected_model"]["selected_model"]["name"]`; the flat lookup is absent.
+- Run the real `GenerationEngine.generate_scene(1)` before assertions so the same test observes the real Queue consequence.
+- Expected RED: an exact fixed provider/model choice is falsely refused; task status/result are `failed`, provider spy count is zero, and the policy error reports selected model `None` instead of `requested-model`.
+- Future GREEN contract: render-plan selected model is flat, the exact fixed policy reaches Queue, provider spy is called exactly once, and task/result finish `done`/`success`.
+- Isolation: no UI, project persistence, default provider routing, PixVerse, fallback semantics, preferred/automatic policy, live provider, credentials, `.env`, or GUI participates.
+- The test may write only temporary storyboard/render/result/asset artifacts under `tmp_path`; it must not use network or project assets.
+
+### Presumed future fix and rollback scope
+
+Recommendation only; not authorization:
+
+- Production owner: `core/ai_core/shot_model_selector.py`.
+- Test scope likely required for a GREEN regression:
+  - new `tests/test_selected_model_schema_contract.py`;
+  - existing `tests/test_shot_model_selection.py`, whose assertions currently codify the nested wrapper.
+- `core/movie_engine/shot_renderer.py` should change only if Product Owner separately approves explicit render-plan validation/versioning or preservation of wrapper diagnostics.
+- `GenerationQueue` should not normalize both forms in the minimal fix.
+- Atomic rollback scope should match the finally approved production/test file list; old nested plans and diagnostic-field preservation must be decided before implementation.
+
+### Residual risks and decisions required
+
+- No formal typed or versioned render-plan schema exists.
+- Existing persisted plans may contain either hand-authored flat or production-generated nested selections.
+- Bare producer flattening can lose router status/quality/notification diagnostics.
+- Queue currently passes the outer selection envelope to provider `model`, even when identity lookup expects the inner descriptor.
+- VideoProvider and storage duplicate model data at several different nesting levels.
+- Dashboard/report silently omit production-nested model identities.
+- Model/provider identities remain string-based.
+- MoviePipeline is a separate policy-less producer and does not use this render-plan path.
+- UI/persistence, preferred/automatic semantics, provider routing, PixVerse, fallback, and direct LLM paths remain separate concerns.
+
+### Scope and controls
+
+- No production code or test was changed or created.
+- No pytest suite was run.
+- Only in-memory Python introspection of `ModelRouter` and `ShotModelSelector` was used; it performed no provider call and created no project asset.
+- No network other than the authorized `git fetch`, no live API, credentials, `.env`, GUI, or live provider was used.
+- `DECISIONS.md`, `COPILOT_TO_JARVIS.md`, documentation, ModelPolicy semantics, UI, persistence, MoviePipeline, Router, ProviderManager, ProviderRegistry, PixVerse, fallback, and Reactive Orchestrator were not changed.
+- The pre-existing dirty/untracked tree remained unchanged against baseline.
+- The proposed RED test and every production fix require separate explicit decisions from Sergey, Product Owner.
+
 ## CODEX-RUN-20260903-007
 
 - Mode: Codex desktop, stage 2C hermetic GenerationEngine fixed ModelPolicy propagation RED test
