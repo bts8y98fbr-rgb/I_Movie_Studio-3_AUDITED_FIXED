@@ -4,16 +4,23 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Proposed decisions awaiting Sergey
 
-## DEC-PROPOSED-20260902-001
+## Approved standing decisions
 
-- Status: PROPOSED
-- Proposal: `GO WITH CONDITIONS`
+### DEC-APPROVED-004 — GO WITH CONDITIONS / Provider identity RED test
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
 - Stabilization: GO
 - New real provider integrations: NO-GO until required gates pass
-- Immediate authorization proposed: provider identity RED-test process only
-- Production fix: requires a separate Product Owner decision after RED evidence
-
-## Approved standing decisions
+- Authorized stage: 1B — provider identity RED test only
+- The only permitted new file is `tests/test_provider_execution_identity.py`
+- The test must compare stable provider identities obtained from the actual routed provider and actual execution boundary
+- Expected RED: routed identity `PixVerse` differs from execution identity `Video AI`
+- Production code, existing tests and documentation must not be changed
+- Network, real API keys, `.env`, GUI and real credentials must not be used
+- After obtaining the expected RED, stop without applying a production fix
+- Any production fix requires a separate Product Owner decision
 
 ### DEC-APPROVED-001 — Authority
 
