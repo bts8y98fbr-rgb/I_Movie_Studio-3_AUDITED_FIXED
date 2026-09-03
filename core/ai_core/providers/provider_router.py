@@ -4,8 +4,9 @@ from .provider_catalog import ProviderCatalog
 class ProviderRouter:
     """Select the best eligible provider for a task."""
 
-    def __init__(self, catalog=None):
+    def __init__(self, catalog=None, execution_available=None):
         self.catalog = catalog or ProviderCatalog()
+        self.execution_available = execution_available
 
     def select(
         self,
@@ -19,6 +20,10 @@ class ProviderRouter:
             if provider.status == "active"
             and provider.supports(media_type)
             and provider.api_available
+            and (
+                self.execution_available is None
+                or self.execution_available(provider.name)
+            )
         ]
 
         if commercial:

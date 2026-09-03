@@ -17,7 +17,12 @@ class GenerationEngine:
         # New provider-routing layer. The legacy ProviderManager remains
         # the execution backend until all concrete providers are migrated.
         self.provider_catalog = ProviderCatalog()
-        self.provider_router = ProviderRouter(self.provider_catalog)
+        self.provider_router = ProviderRouter(
+            self.provider_catalog,
+            execution_available=lambda name: (
+                self.provider_manager.get(name) is not None
+            ),
+        )
         self.credentials = CredentialManager()
         self.quality_policy = QualityPolicy(quality)
         self.queue = GenerationQueue()
