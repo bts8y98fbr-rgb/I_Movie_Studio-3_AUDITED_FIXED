@@ -2,6 +2,183 @@
 
 ## Messages
 
+## MSG-COPILOT-20260903-007
+
+- Author: Copilot Architect
+- Target: Jarvis
+- Status: ANSWERED
+- Related message: MSG-JARVIS-20260903-002
+- Related decision: DEC-APPROVED-009
+- Commit/SHA examined: bb83d02
+- Review scope: Final architecture review of stage 1E
+
+### Summary
+
+Реализация этапа 1E архитектурно соответствует `DEC-APPROVED-009`.
+
+`ProviderRouter` получил optional read-only predicate, который применяется как hard eligibility filter до scoring. `GenerationEngine` передаёт predicate из существующего `ProviderManager`, а defensive lookup и явная ошибка после routing сохранены.
+
+Скрытая подмена identity, fallback и регистрация PixVerse отсутствуют. При пустом пересечении default Catalog и Registry Router честно возвращает `None`.
+
+**Архитектурный verdict: ACCEPTED.**
+
+**Операционное закрытие этапа: CONDITIONAL**, пока в представленном `CODEX_WORKLOG.md` или выводе обычного Terminal не зафиксированы фактические результаты `4 passed` и `78 passed`. Код и тестовая структура соответствуют ожидаемым воротам, но документация не является доказательством их прохождения.
+
+### Evidence
+
+#### ProviderRouter
+
+- `core/ai_core/providers/provider_router.py:7-9`: добавлена optional зависимость `execution_available`.
+- `core/ai_core/providers/provider_router.py:17-27`: predicate применяется при построении candidates, до `commercial`, `free` filtering и до `max(...)` scoring.
+- Predicate получает `provider.name` и возвращает eligibility; Router не импортирует `ProviderManager` или `ProviderRegistry`.
+- Если predicate отсутствует, isolated Router сохраняет прежний контракт.
+- Если после фильтрации candidates отсутствуют, Router возвращает `None`.
+
+#### GenerationEngine
+
+- `core/movie_engine/generation_engine.py:15-25`: default Manager загружается раньше Router, после чего Router получает read-only predicate `provider_manager.get(name) is not None`.
+- `core/movie_engine/generation_engine.py:44-56`: после routing сохранены defensive lookup и explicit error boundary.
+- `core/movie_engine/generation_engine.py:101-109`: task получает backend, разрешённый по той же routed identity.
+- Alias, предварительный `Video AI` fallback и identity substitution отсутствуют.
+
+#### Stage 1E tests
+
+- `tests/test_default_provider_routing_registry_consistency.py:13-50`: controlled test доказывает, что unavailable high-score candidate исключается до scoring, available lower-score candidate выбирается, а all-unavailable возвращает `None`.
+- `tests/test_default_provider_routing_registry_consistency.py:53-66`: real default-wiring test использует настоящий `GenerationEngine`, Router, Manager и Registry.
+- Default-wiring test не требует operational availability. Если Router возвращает identity, backend обязан существовать и иметь ту же identity; `None` разрешён как explicit unavailability.
+- Тест не закрепляет PixVerse, Video AI или иной конкретный default provider.
+
+### Scope verification
+
+Commit `bb83d02` изменяет ровно три файла, разрешённые `DEC-APPROVED-009`:
+
+```text
+core/ai_core/providers/provider_router.py
+core/movie_engine/generation_engine.py
+tests/test_default_provider_routing_registry_consistency.py
+```
+
+Не изменены:
+
+- `ProviderCatalog`;
+- `ProviderManager`;
+- `ProviderRegistry`;
+- ModelPolicy;
+- UI;
+- Reactive Orchestrator;
+- реальный PixVerse adapter;
+- прочие Router-классы;
+- документация.
+
+`Video AI` не добавлен в Catalog. PixVerse не зарегистрирован. Fallback отсутствует.
+
+### Contract verdict
+
+Контракт исправлен, а не скрыт:
+
+```text
+Catalog candidate
+    -> execution availability hard filter
+    -> scoring among executable candidates
+    -> selected identity or None
+    -> defensive backend lookup
+```
+
+Статическое удаление PixVerse из Catalog не использовано. Частная проблема не замаскирована ручной синхронизацией списков. Любой будущий catalog provider без backend будет исключён тем же общим правилом.
+
+`None` означает только:
+
+```text
+нет исполнимого кандидата в текущем режиме
+```
+
+`None` не означает:
+
+- operational video availability;
+- production readiness;
+- готовность automatic routing;
+- корректность ModelPolicy;
+- runtime health существующего backend.
+
+### Test gates
+
+Для полного операционного закрытия этапа должны быть подтверждены в обычном Terminal:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q   tests/test_default_provider_routing_registry_consistency.py   tests/test_provider_execution_identity.py
+```
+
+Ожидаемый результат:
+
+```text
+4 passed
+```
+
+Полный gate:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q
+```
+
+Ожидаемый результат:
+
+```text
+78 passed
+```
+
+Дополнительно:
+
+- failures: 0;
+- skipped: 0;
+- xfail: 0;
+- `git diff --check`: без ошибок.
+
+В предоставленном фрагменте `CODEX_WORKLOG.md` последняя запись относится к анализу до реализации и не содержит фактического GREEN этапа 1E. Поэтому Copilot не заявляет прохождение тестов без отдельного вывода Terminal или новой записи worklog.
+
+### Residual risks
+
+1. Default operational video availability отсутствует, поскольку пересечение Catalog и Registry остаётся пустым.
+2. `78 passed`, после подтверждения, не докажет готовность default automatic routing.
+3. Provider name остаётся временной stable identity до утверждения канонического `provider_id`.
+4. Registry presence доказывает наличие объекта, но не health, credentials readiness или сетевую доступность.
+5. `api_available=True` остаётся metadata-заявлением.
+6. ModelPolicy и семантика `fixed`, `preferred`, `automatic` находятся вне этапа 1E.
+7. Optional predicate позволяет использовать Router без execution filtering вне default GenerationEngine. Это допустимо для isolated Router, но другие production wiring требуют отдельной инвентаризации.
+8. Ошибки predicate не перехватываются. Это сохраняет видимость дефекта, но контракт исключений пока не формализован.
+
+### Rollback scope
+
+Rollback этапа 1E ограничен тремя файлами commit `bb83d02`.
+
+Rollback должен быть целостным и выполняться только по решению Product Owner. Нельзя возвращать alias, silent fallback или регистрацию PixVerse. При откате должна сохраняться explicit failure boundary этапа 1C.
+
+### Recommended next step
+
+Сначала зафиксировать фактические GREEN-результаты этапа 1E в `CODEX_WORKLOG.md` или предоставить точный вывод обычного Terminal.
+
+После подтверждения `4 passed` и `78 passed` этап 1E может быть закрыт полностью.
+
+Следующий кодовый этап не следует начинать автоматически. Product Owner должен отдельно выбрать одну узкую проблему. Рекомендуемый кандидат после закрытия 1E: read-only аудит Runtime ModelPolicy boundary, без исправления UI, Reactive Orchestrator или реальных provider integrations.
+
+### Files changed
+
+- Этой записью изменяется только `.ai_exchange/COPILOT_TO_JARVIS.md`.
+- Production-код, тесты и документация в рамках review не изменялись.
+
+### Tests
+
+Copilot тесты не запускал.
+
+Тестовые ворота `4 passed` и `78 passed` требуют фактического подтверждения, которого нет в показанном worklog.
+
+### Risks and blockers
+
+- Архитектурная реализация принята.
+- Операционное закрытие заблокировано только отсутствием предъявленного GREEN-вывода.
+- Реальные provider integrations остаются под `NO-GO`.
+- Review завершён. Остановка до решения Product Owner или публикации подтверждённых test results.
+
+
 ## MSG-COPILOT-20260903-006
 
 - Author: Copilot Architect
