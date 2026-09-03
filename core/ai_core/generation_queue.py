@@ -3,6 +3,7 @@ from queue import Queue
 import uuid
 
 from core.ai_core.ai_audit_log import AIAuditLog
+from core.ai_core.model_policy import ModelPolicy, SelectionMode
 from core.ai_core.result_storage import AIResultStorage
 from core.movie_engine.project_events import ProjectEvents
 
@@ -16,6 +17,7 @@ class GenerationTask:
         quality= "4k",
         project_path=None,
         metadata=None,
+        model_policy=None,
     ):
         self.task_id = str(uuid.uuid4())[:8]
         self.task_type = task_type
@@ -30,6 +32,7 @@ class GenerationTask:
         )
 
         self.metadata = dict(metadata or {})
+        self.model_policy = model_policy
 
         self.status = "waiting"
         self.result = None
@@ -90,6 +93,34 @@ class GenerationQueue:
                     "selected_model",
                     {},
                 )
+
+            model_policy = task.model_policy
+            if (
+                isinstance(model_policy, ModelPolicy)
+                and model_policy.mode == SelectionMode.FIXED
+            ):
+                provider_name = getattr(task.provider, "name", None)
+                selected_model_name = (
+                    selected_model.get("name")
+                    if isinstance(selected_model, dict)
+                    else None
+                )
+
+                if (
+                    not isinstance(provider_name, str)
+                    or not isinstance(selected_model_name, str)
+                    or not model_policy.allows(
+                        provider_name,
+                        selected_model_name,
+                    )
+                ):
+                    raise RuntimeError(
+                        "Fixed model policy mismatch: "
+                        f"requested provider={model_policy.provider!r}, "
+                        f"model={model_policy.model!r}; "
+                        f"selected provider={provider_name!r}, "
+                        f"model={selected_model_name!r}"
+                    )
 
             if audit:
                 audit.record(
