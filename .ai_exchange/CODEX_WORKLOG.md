@@ -17,6 +17,35 @@
 
 ## Entries
 
+## CODEX-RUN-20260903-005
+
+- Mode: ChatGPT Work isolated repository worktree, stage 2A fixed ModelPolicy execution-boundary RED test
+- Repository base: `49e6baf`
+- Related decision: `DEC-APPROVED-010`
+- Test file: only new `tests/test_runtime_model_policy_boundary.py`
+- Test command: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q tests/test_runtime_model_policy_boundary.py`
+- Test result: `1 failed in 0.03s`
+- RED reason: `GenerationQueue.process_next()` ignored the canonical fixed `task.model_policy` and called `provider.generate()` with a different selected model identity
+
+### Observed identities and boundary
+
+- Fixed requested provider: `Requested Provider`
+- Fixed requested model: `requested-model`
+- Executed provider: `Executed Provider`
+- Selected model passed to execution: `executed-model`
+- Observed provider calls: one; the required count is zero
+- Proven boundary: `GenerationTask(model_policy) -> GenerationQueue.process_next() -> provider.generate()`
+
+### Scope and controls
+
+- The test uses the actual `GenerationTask`, actual `GenerationQueue`, and canonical `core.ai_core.model_policy.ModelPolicy` with `SelectionMode.FIXED`.
+- The spy provider only records calls and performs no network or external I/O.
+- Production code and existing tests were not changed.
+- UI ModelPolicy, project persistence, preferred/automatic semantics, fallback, PixVerse, Provider Registry, ModelPolicy production implementation, and Reactive Orchestrator were not changed.
+- Plugin autoload was disabled only because the isolated Linux environment lacks the system Qt library; the targeted test does not use Qt.
+- The full regression suite was not run because the approved stage requires stopping after the expected RED.
+- A production fix requires a separate Product Owner decision.
+
 ## CODEX-RUN-20260903-004
 
 - Mode: ordinary macOS Terminal, stage 1E operational GREEN verification

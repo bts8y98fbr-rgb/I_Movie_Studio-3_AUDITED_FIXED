@@ -6,6 +6,27 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Approved standing decisions
 
+### DEC-APPROVED-010 — Fixed ModelPolicy execution-boundary RED test
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
+- Base commit: `49e6baf`
+- Related decision: `DEC-APPROVED-009`
+- Authorized stage: 2A — one hermetic RED test for fixed ModelPolicy enforcement at the shared generation execution boundary
+- Permitted test file: `tests/test_runtime_model_policy_boundary.py`
+- Permitted governance worklog: `.ai_exchange/CODEX_WORKLOG.md`
+- The test must use the actual `GenerationTask` and `GenerationQueue`
+- The test must use the canonical `core.ai_core.model_policy.ModelPolicy` with `SelectionMode.FIXED`
+- A spy provider may be used only to observe whether `generate()` was called; network and real providers are prohibited
+- The fixed policy must request one provider/model identity while the task presents a different provider/model identity
+- The test must require explicit refusal before `provider.generate()` is called
+- The policy may be attached to the task as the proposed explicit `task.model_policy` execution-boundary contract without changing production APIs in this RED stage
+- Production code and existing tests must not be changed
+- UI ModelPolicy, project persistence, preferred/automatic semantics, fallback, PixVerse, Provider Registry and Reactive Orchestrator are outside scope
+- Stop after the expected RED
+- A production fix requires a separate Product Owner decision
+
 ### DEC-APPROVED-009 — Stage 1E routing execution eligibility contract fix
 
 - Status: APPROVED
