@@ -6,6 +6,56 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Approved standing decisions
 
+### DEC-APPROVED-013 — GenerationEngine fixed ModelPolicy propagation production fix
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
+- Related decision: `DEC-APPROVED-012`
+- Related review: `MSG-COPILOT-20260903-009`
+- Authorized stage: 2C — minimal GenerationEngine fixed ModelPolicy propagation production fix
+- Permitted production file only:
+  - `core/movie_engine/generation_engine.py`
+- Permitted test file only:
+  - `tests/test_generation_engine_model_policy_propagation.py`
+- `GenerationEngine.__init__()` may accept optional `model_policy=None` as its final parameter
+- Existing positional and named calls must remain compatible
+- `GenerationEngine` must preserve the supplied canonical policy object as `self.model_policy`
+- The policy must not be copied, normalized, interpreted or evaluated by `GenerationEngine`
+- Every `GenerationTask` created by `GenerationEngine` must receive `model_policy=self.model_policy`
+- Fixed-policy enforcement must remain exclusively in `GenerationQueue.process_next()`
+- `GenerationEngine` must not call `ModelPolicy.allows()` or duplicate enforcement
+- Calls without `model_policy` must preserve their previous behavior
+- No fallback or provider/model substitution may be introduced
+- The permitted test file must contain exactly two propagation contract tests:
+  1. fixed mismatch is propagated and refused before provider generation;
+  2. exact fixed provider/model match is propagated and permits exactly one provider call
+- Targeted GREEN gate: exactly `2 passed`
+- Full regression gate: exactly `82 passed`, with no failures, skips or xfails
+- `git diff --check` must report no errors
+- Staged/runtime scope must contain only:
+  - `core/movie_engine/generation_engine.py`
+  - `tests/test_generation_engine_model_policy_propagation.py`
+- Existing unrelated dirty files must remain untouched and outside staged scope
+- After GREEN, stop without runtime commit or push until final Copilot review and Product Owner authorization
+- Do not modify `GenerationQueue`, ModelPolicy semantics, UI, persistence, MoviePipeline, selected_model schema, Router, ProviderManager, ProviderRegistry, PixVerse, fallback or Reactive Orchestrator
+- Do not use network, live APIs, credentials, `.env` or GUI
+- Rollback scope is limited atomically to:
+  - `core/movie_engine/generation_engine.py`
+  - `tests/test_generation_engine_model_policy_propagation.py`
+
+#### Residual risks
+
+1. UI continues using a duplicate ModelPolicy representation.
+2. Canonical policy is not persisted or reconstructed with the project.
+3. MoviePipeline remains a policy-less task producer.
+4. The double-nested selected_model defect remains unresolved.
+5. Preferred and automatic modes remain unenforced at the execution boundary.
+6. Direct LLM/provider paths may bypass GenerationQueue.
+7. Provider and model identities remain string-based; canonical IDs are not approved.
+8. GREEN proves propagation only through GenerationEngine, not the complete UI/Project → Runtime path.
+9. The policy object is passed as a shared reference; immutability is not yet formally specified.
+
 ### DEC-APPROVED-012 — GenerationEngine fixed ModelPolicy propagation RED test
 
 - Status: APPROVED
