@@ -6,6 +6,40 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Approved standing decisions
 
+### DEC-APPROVED-009 — Stage 1E routing execution eligibility contract fix
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
+- Base commit: `403bb4d`
+- Related decision: `DEC-APPROVED-008`
+- Related Copilot review: `MSG-COPILOT-20260903-005`
+- Related Codex analysis: `CODEX-RUN-20260903-003`
+- Authorized stage: 1E — filter catalog candidates without registered execution backends before Router scoring
+- Permitted production files only:
+  - `core/ai_core/providers/provider_router.py`
+  - `core/movie_engine/generation_engine.py`
+- Permitted test file only:
+  - `tests/test_default_provider_routing_registry_consistency.py`
+- `ProviderRouter` may receive an optional read-only execution-availability predicate keyed by stable provider identity
+- When supplied, the predicate is a hard eligibility filter and must run before soft scoring
+- `GenerationEngine` must wire the predicate from its existing default `ProviderManager`
+- The defensive post-routing backend lookup and explicit failure boundary in `GenerationEngine` must remain
+- `Router.select()` returning `None` is an allowed explicit-unavailability result when no executable candidate exists
+- The current default Catalog/Registry intersection is empty; GREEN consistency must not be described as operational default video availability
+- The test file may contain exactly two contract tests:
+  1. a controlled test proving that a higher-scoring unavailable candidate is excluded before scoring and a lower-scoring available candidate is selected, including the all-unavailable `None` result;
+  2. a real default-wiring consistency test proving that any returned identity resolves to a registered backend with the same identity, while allowing `None` as explicit unavailability
+- The existing availability assertion must not be silently weakened; the test must be renamed/reframed to state the consistency contract accurately
+- Expected targeted gate: exactly `4 passed` across the two stage-1E tests and the two provider-identity tests
+- Expected full regression gate: exactly `78 passed`, with no failures, skips or xfails
+- Do not add `Video AI` to `ProviderCatalog`; it is a deterministic manifest adapter, not a real external video provider
+- Do not register or integrate PixVerse
+- Do not modify `ProviderCatalog`, `ProviderManager`, `ProviderRegistry`, ModelPolicy, UI, Reactive Orchestrator, documentation or other tests
+- Do not add fallback, identity substitution, network access, live APIs, credentials, `.env` access or GUI use
+- Existing unrelated dirty-working-tree changes must remain untouched
+- After GREEN and verification, stop without commit or push
+
 ### DEC-APPROVED-008 — Default Router/Registry consistency RED test
 
 - Status: APPROVED
