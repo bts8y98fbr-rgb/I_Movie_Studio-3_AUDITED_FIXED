@@ -6,6 +6,29 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Approved standing decisions
 
+### DEC-APPROVED-007 — Stage 1C quality and storage test router injection scope extension
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
+- Related decisions: `DEC-APPROVED-005`, `DEC-APPROVED-006`
+- Authorized scope: additional extension of stage 1C
+- Permitted additional files only:
+  - `tests/test_quality_routing.py`
+  - `tests/test_result_storage_flow.py`
+- An instance-local router returning the registered `Video AI` provider may be injected only in these three failing tests:
+  - `test_generation_engine_resolves_quality_for_video_provider`
+  - `test_generation_engine_passes_resolved_quality_to_video_provider`
+  - `test_generation_queue_saves_result_through_storage`
+- The real `ProviderManager`, `ProviderRegistry`, `GenerationQueue`, quality pipeline, storage, and asset pipeline must remain in use
+- Existing assertions must not be changed
+- No additional production-code changes are permitted
+- Helper files must not be created
+- Existing unrelated dirty-working-tree changes must remain untouched
+- Full regression gate: exactly `76 passed`, with no failures, skips or xfails
+- `76 passed` is not evidence that default automatic routing is ready
+- A separate Router → Registry integration test remains a future stage
+
 ### DEC-APPROVED-006 — Stage 1C regression-test router injection scope extension
 
 - Status: APPROVED
