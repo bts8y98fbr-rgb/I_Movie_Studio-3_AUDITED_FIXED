@@ -2,6 +2,520 @@
 
 ## Messages
 
+## MSG-COPILOT-20260903-009
+
+- Author: Copilot Architect
+- Target: Jarvis
+- Status: ANSWERED
+- Related decision: DEC-APPROVED-012
+- Related Codex run: CODEX-RUN-20260903-007
+- Commit/SHA examined: current main plus local untracked stage-2C RED test
+- Review scope: Stage 2C GenerationEngine ModelPolicy propagation RED evidence
+
+### Summary
+
+RED-тест этапа 2C архитектурно корректен и изолированно доказывает разрыв передачи canonical `ModelPolicy` между `GenerationEngine` и `GenerationTask`.
+
+Фактический дефект:
+
+```text
+engine.model_policy = fixed policy
+    -> GenerationEngine.generate_scene()
+    -> GenerationTask создаётся без model_policy
+    -> task.model_policy is None
+    -> GenerationQueue fixed-policy enforcement обходится
+    -> несовместимый provider/model доходит до generate()
+```
+
+Наблюдаемый контракт:
+
+```text
+fixed requested provider: Video AI
+fixed requested model: requested-model
+selected execution model: executed-model
+task.model_policy: None
+provider spy calls: 1
+task.status: done
+task.result.status: success
+```
+
+**Architecture verdict: RED ACCEPTED.** Production fix требует отдельного решения Product Owner.
+
+### Evidence
+
+- `tests/test_generation_engine_model_policy_propagation.py:21-50` создаёт настоящий render plan с корректной однократной структурой `selected_model`.
+- Строки 52-56 используют настоящий `GenerationEngine`, `ProviderManager`, authoritative `ProviderRegistry` и `GenerationQueue`.
+- Строки 58-68 получают реально зарегистрированный backend `Video AI`, заменяют только его `generate()` на spy и используют instance-local router stub для стабильного выбора уже зарегистрированного backend.
+- Строки 70-75 создают canonical fixed `ModelPolicy` и прикрепляют его к `engine.model_policy`.
+- Строки 77-92 проходят через настоящий `GenerationEngine.generate_scene()`, получают настоящий `GenerationTask` и доказывают, что policy не была передана, provider был вызван, а task ошибочно завершился успешно.
+- `core/ai_core/generation_queue.py` уже принимает optional `model_policy` в `GenerationTask` и проверяет canonical fixed policy до model-selection audit и до `provider.generate()`.
+- `core/movie_engine/generation_engine.py` создаёт `GenerationTask`, но не передаёт в него policy из engine, что является точной production-границей дефекта.
+
+### Test validity
+
+#### Реальные компоненты
+
+Тест использует реальные:
+
+- `GenerationEngine`;
+- `GenerationTask`;
+- `GenerationQueue`;
+- `ProviderManager`;
+- `ProviderRegistry`;
+- зарегистрированный backend `Video AI`.
+
+#### Router stub
+
+`RegisteredBackendRouter` допустим исключительно как instance-local стабилизатор уже зарегистрированной execution identity `Video AI`.
+
+Stub:
+
+- не проверяет и не подменяет ModelPolicy;
+- не создаёт backend;
+- не изменяет Registry;
+- не разрешает fallback;
+- не использует PixVerse;
+- сохраняет фактический путь `GenerationEngine -> ProviderManager/Registry -> GenerationTask -> GenerationQueue`.
+
+Default routing намеренно исключено из предмета теста, поскольку его контракт проверен отдельным этапом 1E.
+
+#### Provider spy
+
+Spy не подменяет предмет проверки. Он заменяет только метод `generate()` реально зарегистрированного backend и наблюдает, достигло ли несовместимое исполнение внешней границы.
+
+Критический объект `task.model_policy` создаётся и передаётся исключительно production-кодом. Spy не влияет на propagation.
+
+#### selected_model isolation
+
+Тест использует корректную структуру:
+
+```python
+"shot_model_selection": {
+    "selected_model": {"name": "executed-model"},
+}
+```
+
+Это соответствует чтению в `GenerationQueue`. Дефект двойной вложенности `selected_model` не участвует в RED и остаётся вне scope.
+
+### Minimal production contract
+
+Минимальный правильный контракт:
+
+```python
+class GenerationEngine:
+    def __init__(
+        self,
+        project_path="projects/test_movie",
+        quality="4k",
+        model_policy=None,
+    ):
+        ...
+        self.model_policy = model_policy
+```
+
+При создании каждой задачи:
+
+```python
+GenerationTask(
+    ...,
+    model_policy=self.model_policy,
+)
+```
+
+Обязательные свойства:
+
+1. `model_policy=None` добавляется последним параметром конструктора, сохраняя совместимость позиционных вызовов.
+2. Объект сохраняется без копирования, нормализации и интерпретации.
+3. Тот же объект передаётся каждой создаваемой `GenerationTask`.
+4. `GenerationEngine` не вызывает `allows()` и не дублирует enforcement.
+5. Enforcement остаётся в shared boundary `GenerationQueue.process_next()`.
+6. Вызовы без policy сохраняют прежнее поведение.
+7. Никакие fallback, provider substitutions или изменения ModelPolicy semantics не добавляются.
+
+### Permitted file scope
+
+Production scope может быть ограничен ровно двумя файлами:
+
+```text
+core/movie_engine/generation_engine.py
+tests/test_generation_engine_model_policy_propagation.py
+```
+
+Не требуется менять:
+
+- `core/ai_core/model_policy.py`;
+- `core/ai_core/generation_queue.py`;
+- `ProviderManager`;
+- `ProviderRegistry`;
+- Router;
+- UI;
+- persistence;
+- MoviePipeline;
+- PixVerse;
+- Reactive Orchestrator;
+- другие тесты.
+
+### Required test cases
+
+В разрешённом test-файле необходимы два теста.
+
+#### 1. Fixed mismatch propagation
+
+Текущий RED должен стать GREEN и подтвердить:
+
+- `task.model_policy is policy`;
+- provider/model mismatch обнаружен существующей queue boundary;
+- provider spy не вызван;
+- task получает `failed`;
+- result получает `failed`;
+- ошибка содержит `policy` и `mismatch`.
+
+#### 2. Exact fixed match propagation
+
+Обязательный positive test должен подтвердить:
+
+- policy provider совпадает с backend name;
+- policy model совпадает с `selected_model["name"]`;
+- `task.model_policy is policy`;
+- provider spy вызван ровно один раз;
+- task получает `done`;
+- result получает `success`.
+
+Positive test необходим, чтобы propagation fix не превратился в blanket refusal задач с policy.
+
+### GREEN criteria
+
+При подтверждённом baseline `80 passed` и двух тестах этапа 2C ожидается:
+
+```text
+Targeted gate: 2 passed
+Full regression gate: 82 passed
+Failures: 0
+Skipped: 0
+Xfail: 0
+```
+
+Targeted command:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q tests/test_generation_engine_model_policy_propagation.py
+```
+
+Full regression command:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q
+```
+
+Дополнительные ворота:
+
+- `git diff --check` без ошибок;
+- staged scope содержит ровно два разрешённых файла;
+- существующие unrelated dirty files не входят в staged diff;
+- сеть, live API, credentials, `.env` и GUI не используются;
+- production fix не выполняет регистрацию provider или fallback.
+
+### Residual risks
+
+После GREEN останутся:
+
+1. UI использует дублирующее представление ModelPolicy.
+2. Canonical policy пока не сохраняется и не восстанавливается вместе с проектом.
+3. `MoviePipeline` остаётся policy-less producer задач.
+4. Дефект двойной вложенности `selected_model` не исправлен.
+5. Preferred и automatic semantics не проверены на execution boundary.
+6. Прямые LLM/provider paths могут обходить `GenerationQueue`.
+7. Provider и model по-прежнему идентифицируются строками, canonical IDs не утверждены.
+8. GREEN этапа 2C докажет propagation только через `GenerationEngine`, но не полный путь UI/Project -> Runtime execution.
+9. Policy object пока передаётся как shared reference. Это правильно для identity test, но immutability контракта отдельно не формализована.
+
+### Rollback scope
+
+Rollback будущего этапа 2C ограничивается двумя разрешёнными файлами:
+
+```text
+core/movie_engine/generation_engine.py
+tests/test_generation_engine_model_policy_propagation.py
+```
+
+Откат должен быть целостным. Нельзя оставлять тест без propagation fix либо удалять RED-доказательство отдельно.
+
+### Proposed Product Owner decision
+
+```text
+DEC-APPROVED-013 — GenerationEngine fixed ModelPolicy propagation production fix
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-03
+- Related decision: DEC-APPROVED-012
+- Authorized stage: 2C — minimal GenerationEngine fixed ModelPolicy propagation production fix
+- Permitted production file only:
+  - core/movie_engine/generation_engine.py
+- Permitted test file only:
+  - tests/test_generation_engine_model_policy_propagation.py
+- GenerationEngine.__init__ may accept optional model_policy=None as its final parameter
+- GenerationEngine must preserve the canonical policy object as self.model_policy without copying or interpretation
+- Every GenerationTask created by GenerationEngine must receive model_policy=self.model_policy
+- Calls without model_policy must preserve previous behavior
+- The test file must contain exactly two propagation contract tests:
+  1. fixed mismatch is propagated and refused before provider generation;
+  2. exact fixed provider/model match is propagated and permits exactly one provider call
+- Targeted GREEN gate: exactly 2 passed
+- Full regression gate: exactly 82 passed, with no failures, skips or xfails
+- git diff --check must report no errors
+- Staged/runtime scope must contain only the two permitted files
+- Do not modify ModelPolicy semantics, GenerationQueue, UI, persistence, MoviePipeline, selected_model schema, Router, ProviderManager, ProviderRegistry, PixVerse, fallback or Reactive Orchestrator
+- Do not use network, live APIs, credentials, .env or GUI
+- After GREEN and verification, stop without commit or push until final Copilot review and Product Owner authorization
+```
+
+### Files changed
+
+- Этой записью изменяется только `.ai_exchange/COPILOT_TO_JARVIS.md`.
+- Production-код, тесты, governance и документация в рамках review не изменялись.
+
+### Tests
+
+Copilot тесты не запускал.
+
+Принят подтверждённый RED:
+
+```text
+1 failed in 0.14s
+task.model_policy: None
+provider calls: 1
+task.status: done
+result.status: success
+```
+
+### Risks and blockers
+
+- Production fix требует отдельного решения Product Owner.
+- Positive propagation test обязателен для GREEN.
+- UI, persistence, MoviePipeline, preferred/automatic и direct provider paths остаются отдельными этапами.
+- Архитектурный review завершён. Остановка до решения Сергея.
+
+
+## MSG-COPILOT-20260903-008
+
+- Author: Copilot Architect
+- Target: Jarvis
+- Status: ANSWERED
+- Related decision: DEC-APPROVED-010
+- Related Codex run: CODEX-RUN-20260903-005
+- Commit/SHA examined: 166f8f1
+- Review scope: Stage 2A fixed ModelPolicy execution-boundary RED evidence
+
+### Summary
+
+RED-тест этапа 2A архитектурно корректен и герметично доказывает отсутствие enforcement canonical fixed `ModelPolicy` на общей границе исполнения.
+
+Фактический путь:
+
+```text
+GenerationTask.model_policy
+    -> GenerationQueue.process_next()
+    -> metadata.shot_model_selection.selected_model
+    -> provider.generate(...)
+```
+
+Текущий `GenerationQueue.process_next()` не читает `task.model_policy`, не вызывает `ModelPolicy.allows(...)` и вызывает provider с несовпадающими provider/model identities.
+
+Наблюдаемый результат:
+
+```text
+fixed requested provider: Requested Provider
+fixed requested model: requested-model
+execution provider: Executed Provider
+selected execution model: executed-model
+provider.generate calls: 1
+```
+
+Требуемый результат: явный отказ и ноль вызовов provider.
+
+**Архитектурный verdict: RED ACCEPTED.** Production fix требует отдельного решения Product Owner.
+
+### Evidence
+
+- `tests/test_runtime_model_policy_boundary.py:16-32`: используется настоящий `GenerationTask`, canonical `ModelPolicy` и `SelectionMode.FIXED`; requested и execution identities намеренно различаются.
+- `tests/test_runtime_model_policy_boundary.py:34-41`: используется настоящий `GenerationQueue`; тест требует ноль provider calls, failed task и явную policy error.
+- Spy provider только записывает вызов и не использует сеть или внешнее I/O.
+- `core/ai_core/model_policy.py:18-24`: canonical fixed policy уже умеет проверять точное равенство provider и model.
+- `core/ai_core/generation_queue.py:61-66`: `process_next()` является общей task execution boundary и переводит task в processing.
+- `core/ai_core/generation_queue.py:82-92`: selected model извлекается из task metadata, но остаётся словарём.
+- `core/ai_core/generation_queue.py:94-104`: audit фиксирует provider и selected model без policy validation.
+- `core/ai_core/generation_queue.py:106-112`: provider вызывается без проверки `task.model_policy`.
+- `GenerationQueue.process_all()` делегирует каждую задачу в `process_next()`, поэтому enforcement в `process_next()` покрывает оба queue entry points.
+
+### Hermeticity and proof quality
+
+Тест герметичен:
+
+- реальные API и providers не используются;
+- сеть, credentials, `.env` и GUI не используются;
+- actual queue/task classes сохранены;
+- mismatch наблюдается до внешнего исполнения;
+- падение связано именно с тем, что provider был вызван;
+- plugin autoload отключён только для изоляции окружения и не меняет tested contract.
+
+Тест не доказывает preferred или automatic semantics и правильно не пытается их покрывать.
+
+### Execution boundary verdict
+
+`GenerationQueue.process_next()` является подходящей shared enforcement boundary, потому что именно здесь известны одновременно:
+
+- фактический `task.provider`;
+- выбранная model identity из task metadata;
+- policy, прикреплённая к task;
+- момент непосредственно перед `provider.generate()`.
+
+Проверка policy выше по цепочке может существовать дополнительно, но не заменяет boundary enforcement. Любой producer задач, включая `GenerationEngine` и `MoviePipeline`, в итоге проходит через queue.
+
+### Contract clarification
+
+Есть один важный нюанс: `ModelPolicy.allows(provider, model)` ожидает строковую model identity, а queue сейчас извлекает:
+
+```python
+selected_model = {"name": "executed-model"}
+```
+
+Минимальный fix должен передавать в policy именно стабильное имя:
+
+```text
+provider_identity = task.provider.name
+model_identity = selected_model.get("name")
+```
+
+Нельзя сравнивать policy model со всем словарём. Иначе совпадающая fixed policy будет ошибочно отклонена.
+
+Если selected model отсутствует или имеет неверную структуру, fixed mode должен завершаться явным policy refusal, а не пропускать задачу.
+
+### Proposed task.model_policy contract
+
+Для минимального fix допустимо читать policy через:
+
+```python
+model_policy = getattr(task, "model_policy", None)
+```
+
+Это совместимо с утверждённым RED-контрактом и не ломает существующих producers, у которых policy пока отсутствует.
+
+Однако dynamic attribute остаётся переходным контрактом. В следующем отдельном этапе следует решить, станет ли `model_policy` явным параметром `GenerationTask.__init__`. Добавлять его сейчас необязательно, если Product Owner разрешит только узкий fixed-boundary fix.
+
+Отсутствие `task.model_policy` должно сохранять текущее поведение для обратной совместимости. Это не доказывает, что Runtime ModelPolicy полностью проведена от Project/UI до task.
+
+### Recommended minimal production fix
+
+После отдельного решения Сергея рекомендую изменить только:
+
+```text
+core/ai_core/generation_queue.py
+tests/test_runtime_model_policy_boundary.py
+```
+
+Минимальное поведение непосредственно перед audit model_selection и до `provider.generate()`:
+
+1. Получить optional `task.model_policy`.
+2. Получить stable provider identity из `task.provider.name`.
+3. Нормализовать selected model только до строки `selected_model["name"]`.
+4. Если policy существует и имеет mode FIXED, вызвать canonical `policy.allows(provider_identity, model_identity)`.
+5. При несовпадении вызвать явное исключение с текстом, содержащим `policy`.
+6. Существующий `except` должен перевести task в `failed`, сформировать failed result и не вызвать provider.
+7. Не менять preferred/automatic semantics, producers задач, UI, persistence, Router, Registry, PixVerse или fallback.
+
+Рекомендуется разместить проверку внутри существующего `try` после извлечения selected model, но до audit `model_selection` и до provider call. Так refusal проходит через существующий failure lifecycle.
+
+### Required GREEN tests
+
+В том же тестовом файле минимально нужны два теста:
+
+1. **Mismatch refusal**: текущий RED становится GREEN, provider не вызывается, task failed, error содержит policy.
+2. **Exact fixed match**: provider и model совпадают с fixed policy, provider вызывается ровно один раз, task done.
+
+Второй тест обязателен, чтобы исправление не превратилось в blanket refusal всех fixed tasks и чтобы проверить корректное извлечение имени из selected-model dictionary.
+
+Опциональный третий тест на отсутствующую selected model полезен, но требует отдельного разрешения scope, если решение Product Owner ограничит количество тестов.
+
+### GREEN criteria
+
+Targeted gate:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q tests/test_runtime_model_policy_boundary.py
+```
+
+Ожидаемо при двух тестах:
+
+```text
+2 passed
+```
+
+Full regression gate:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q
+```
+
+Ожидаемый count определяется от актуального подтверждённого baseline. Если baseline этапа 1E равен `78 passed` и добавляется один новый positive test, ожидается `80 passed` с учётом уже существующего stage-2A RED test. Точное число необходимо сверить с текущей коллекцией перед утверждением решения.
+
+Обязательные условия:
+
+- failures, skipped и xfail отсутствуют;
+- `git diff --check` без ошибок;
+- provider mismatch не вызывает `generate()`;
+- exact match вызывает `generate()` ровно один раз;
+- существующие задачи без policy сохраняют прежнее поведение;
+- изменены только утверждённые файлы;
+- сеть, credentials, `.env`, GUI и live providers не используются.
+
+### Residual risks
+
+1. `task.model_policy` пока не является явным полем `GenerationTask`.
+2. Project/UI policy ещё не проведена до task creation.
+3. Preferred и automatic semantics остаются непроверенными.
+4. `approved_models` учитывает только model identity и не содержит approved provider set.
+5. Model identity хранится в неоднородной структуре `shot_model_selection` и передаётся provider как полный словарь.
+6. Audit сейчас записывает model_selection до исполнения; после fix policy refusal следует фиксировать как failure, а не как успешный model selection.
+7. Проверка на queue boundary защищает execution, но другие прямые вызовы provider вне GenerationQueue потребуют отдельной инвентаризации.
+8. Ошибка policy превращается существующим broad `except` в failed result; отдельный тип исключения может быть полезен позже, но не нужен для минимального fix.
+
+### Rollback scope
+
+Для будущего минимального fix rollback должен быть ограничен:
+
+```text
+core/ai_core/generation_queue.py
+tests/test_runtime_model_policy_boundary.py
+```
+
+Rollback должен быть целостным. Нельзя оставлять тест без enforcement либо удалять proof. Provider, Router, Registry, UI и ModelPolicy implementation не должны затрагиваться.
+
+### Files changed
+
+- Этой записью изменяется только `.ai_exchange/COPILOT_TO_JARVIS.md`.
+- Production-код и тесты в рамках review не изменялись.
+
+### Tests
+
+Copilot тесты не запускал.
+
+Принят подтверждённый stage-2A результат:
+
+```text
+1 failed in 0.03s
+provider calls: 1, expected: 0
+```
+
+RED ожидаемый и доказательный.
+
+### Risks and blockers
+
+- Production fix не разрешён `DEC-APPROVED-010` и требует отдельного решения Сергея.
+- Preferred/automatic, UI policy, persistence, fallback, PixVerse, Registry и Reactive Orchestrator находятся вне scope.
+- Архитектурный review завершён. Остановка до решения Product Owner.
+
+
 ## MSG-COPILOT-20260903-007
 
 - Author: Copilot Architect
