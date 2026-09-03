@@ -17,6 +17,130 @@
 
 ## Entries
 
+## CODEX-RUN-20260903-001
+
+- Mode: Codex desktop, stage 1B governance record
+- Repository: local `I_Movie_Studio-3_AUDITED_FIXED`
+- Base commit: `7d5a31f`
+- Related decision: `DEC-APPROVED-004`
+- Stage: 1B — provider identity hermetic RED test, completed and stopped
+- File created: only untracked `tests/test_provider_execution_identity.py`
+- Test command: `pytest -q tests/test_provider_execution_identity.py`
+- Test result: `1 failed in 0.11s`
+- RED reason: only `PixVerse != Video AI`
+
+### Observed identities
+
+- Routed: `PixVerse`
+- Execution: `Video AI`
+- Task provider: `Video AI`
+
+### Proven runtime path
+
+`GenerationEngine.generate_scene → FakeProviderRouter → production alias → SpyProviderManager.get(name) → FakeExecutionProvider(name) → GenerationTask → GenerationQueue`
+
+The final hermetic version does not call the real `ProviderManager.get()` or `ProviderRegistry.get()`. `SpyProviderManager.get(name)` records the actual production argument and constructs the fake execution provider with that same `name`; it does not hard-code the execution identity.
+
+### Full test source
+
+```python
+import json
+from types import SimpleNamespace
+
+
+class FakeProviderRouter:
+    def __init__(self):
+        self.routed_provider = SimpleNamespace(name="PixVerse")
+
+    def select(self, media_type, mode="mixed", commercial=False):
+        assert media_type == "video"
+        assert mode == "free"
+        return self.routed_provider
+
+
+class FakeExecutionProvider:
+    def __init__(self, name):
+        self.name = name
+
+    def capabilities(self):
+        return {
+            "resolutions": ["3840x2160"],
+            "fps": [60],
+            "hdr": [True],
+            "color_depth": [10],
+        }
+
+    def generate(self, prompt, **kwargs):
+        return {
+            "status": "success",
+            "provider": self.name,
+        }
+
+
+class SpyProviderManager:
+    def __init__(self):
+        self.get_calls = []
+        self.providers = {}
+
+    def get(self, name):
+        self.get_calls.append(name)
+        if name not in self.providers:
+            self.providers[name] = FakeExecutionProvider(name)
+        return self.providers[name]
+
+
+def test_routed_provider_identity_reaches_execution_boundary(tmp_path):
+    from core.movie_engine.generation_engine import GenerationEngine
+
+    render_dir = tmp_path / "render" / "scene_001"
+    render_dir.mkdir(parents=True)
+
+    render_plan = {
+        "scene_id": 1,
+        "render_settings": {
+            "resolution": "3840x2160",
+            "fps": 60,
+            "hdr": True,
+            "color_depth": 10,
+        },
+        "shots": [
+            {
+                "shot_id": 1,
+                "director_prompt": "Provider identity boundary test",
+                "timeline": {"duration": 1},
+                "camera": {},
+            }
+        ],
+    }
+
+    (render_dir / "render_plan.json").write_text(
+        json.dumps(render_plan),
+        encoding="utf-8",
+    )
+
+    engine = GenerationEngine(project_path=tmp_path, quality="4k")
+    fake_router = FakeProviderRouter()
+    spy_manager = SpyProviderManager()
+    engine.provider_router = fake_router
+    engine.provider_manager = spy_manager
+
+    engine.generate_scene(1)
+
+    routed_provider_name = fake_router.routed_provider.name
+    execution_provider_name = spy_manager.get_calls[-1]
+    task_provider_name = engine.queue.tasks[0].provider.name
+
+    assert execution_provider_name == task_provider_name
+    assert routed_provider_name == execution_provider_name
+```
+
+### Scope and controls
+
+- Network, APIs, credentials, `.env`, and GUI were not used.
+- Production code, existing tests, and documentation were not changed.
+- The RED test has not been added to Git and must not be published to `main` before a separate decision on the production fix.
+- Stage 1B is stopped and awaits Copilot architectural review and a Product Owner decision.
+
 ## CODEX-RUN-20260902-001
 
 - Mode: Codex CLI `0.152.1`, `gpt-5.6-sol`, sandbox `read-only`
