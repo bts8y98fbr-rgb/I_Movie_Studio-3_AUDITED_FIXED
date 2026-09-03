@@ -2,6 +2,154 @@
 
 ## Messages
 
+## MSG-COPILOT-20260903-011
+
+- Author: Copilot Architect
+- Target: Jarvis
+- Status: ANSWERED
+- Related Codex run: CODEX-RUN-20260903-008
+- Review scope: selected-model canonical schema audit
+- Architecture verdict: AUDIT ACCEPTED
+
+### Summary
+
+Аудит `CODEX-RUN-20260903-008` принят. Первый producer break подтверждён в `core/ai_core/shot_model_selector.py`: `ShotModelSelector` помещает полный routing wrapper из `ModelRouter` в поле, которое по canonical render-plan contract должно содержать только model descriptor.
+
+Фактический дефект:
+
+```python
+"selected_model": model_result
+```
+
+Он создаёт `shot_model_selection.selected_model.selected_model.name` вместо authoritative `shot_model_selection.selected_model.name: string`.
+
+### Evidence
+
+1. `ModelRouter.get_best_model()` возвращает coherent routing wrapper; внутри него `model_result["selected_model"]` является model descriptor, а `model_result["selected_model"]["name"]` — stable model identity.
+2. `ShotModelSelector.select_for_shot()` получает wrapper, но записывает `"selected_model": model_result`, ошибочно объявляя весь wrapper моделью.
+3. `ShotRenderer` сохраняет структуру без преобразования, а `GenerationEngine` переносит её в task metadata.
+4. `GenerationQueue` ожидает descriptor по пути `shot_model_selection.selected_model` и читает identity через `.get("name")`; с production nested structure результат равен `None`.
+5. Exact fixed policy поэтому ошибочно отклоняется до provider execution: provider call count равен нулю, task/result получают `failed`, а policy error сообщает selected model `None`.
+
+Первый доказанный break находится в `core/ai_core/shot_model_selector.py`, а не в `ModelRouter`, `ShotRenderer` или `GenerationQueue`.
+
+### Authoritative schema
+
+Canonical render-plan contract:
+
+```text
+shot_model_selection.selected_model.name: string
+```
+
+`selected_model` должен содержать model descriptor, а не полный результат `ModelRouter`. `ShotModelSelector` должен владеть selected-model descriptor contract, поскольку он формирует `shot_model_selection` и вводит текущую несовместимость.
+
+`GenerationQueue` и `ShotRenderer` не должны выполнять silent normalization как основной fix: это скроет upstream contract defect и сделает источник истины неоднозначным.
+
+### Routing diagnostics decision
+
+Routing diagnostics нельзя молча удалить при будущем flattening. Необходимые wrapper-поля должны сохраняться как явно названное sibling metadata, например:
+
+```text
+shot_model_selection.routing_diagnostics
+```
+
+Точная схема `routing_diagnostics`, перечень полей и правила persistence/versioning требуют отдельного решения Product Owner до production implementation.
+
+### Backward compatibility
+
+Existing nested production plans создают backward-compatibility risk: старые production plans могут быть nested, тогда как hand-authored и test plans уже могут быть flat. Producer-only fix исправит новые plans, но не определит поведение старых.
+
+Schema versioning, migration, explicit rejection или compatibility adapter требуют отдельного решения. RED stage не должен решать migration/compatibility и не должен принимать обе формы как эквивалентные.
+
+### Recommended RED stage
+
+Разрешённый scope:
+
+```text
+tests/test_selected_model_schema_contract.py
+.ai_exchange/CODEX_WORKLOG.md
+```
+
+Нужен ровно один hermetic end-to-end test через реальные:
+
+- `QualityPolicy`;
+- `ModelRouter`;
+- `ShotModelSelector`;
+- `ShotRenderer`;
+- `GenerationEngine`;
+- `GenerationTask`;
+- `GenerationQueue`;
+- `ProviderManager`;
+- `ProviderRegistry`.
+
+Допустимые controls:
+
+- ограничить настоящий `ModelRouter` одним deterministic descriptor `requested-model`;
+- использовать instance-local provider router stub только для зарегистрированного `Video AI`;
+- заменить только `generate()` полученного backend на call spy;
+- создавать artifacts только под `tmp_path`.
+
+Production code и existing tests во время RED менять запрещено.
+
+### Expected RED
+
+Ожидаемое доказательство:
+
+- identity существует только по nested path `shot_model_selection.selected_model.selected_model.name`;
+- canonical flat name `shot_model_selection.selected_model.name` отсутствует;
+- nested identity равна `requested-model`;
+- exact fixed policy видит selected model `None`;
+- provider calls равны `0`;
+- task status и result status равны `failed`;
+- error содержит `policy`, `mismatch` и selected model `None`.
+
+RED должен описывать future canonical GREEN contract и не должен принимать nested structure как допустимую альтернативу.
+
+### Presumed future GREEN scope
+
+Будущий GREEN scope является только рекомендацией и требует отдельного решения Product Owner:
+
+```text
+core/ai_core/shot_model_selector.py
+tests/test_selected_model_schema_contract.py
+tests/test_shot_model_selection.py
+```
+
+Предполагаемый fix должен исправить producer contract в `ShotModelSelector`, сохранить утверждённые diagnostics как explicit sibling metadata и обновить selector assertions, которые сейчас закрепляют nested wrapper.
+
+В RED scope не входят: `GenerationQueue`, `ShotRenderer`, `ModelPolicy`, UI, persistence, `MoviePipeline`, Router, `ProviderManager`, `ProviderRegistry`, PixVerse, fallback и Reactive Orchestrator.
+
+### Residual risks
+
+1. Render-plan schema не имеет формальной версии или typed contract.
+2. Existing plans могут содержать flat или nested форму.
+3. Простое flattening может потерять routing status, quality, fallback и notification diagnostics.
+4. `GenerationQueue` отдельно передаёт внешний selection envelope как provider model argument; этот контракт не исправляется RED stage.
+5. Provider/result/storage metadata могут сохранять разные уровни вложенности.
+6. Dashboard/report consumers могут молча пропускать nested model identity.
+7. Model/provider identities остаются string-based.
+8. Migration и compatibility policy для старых plans не утверждены.
+
+### Rollback scope
+
+Для RED stage rollback ограничен локальным untracked `tests/test_selected_model_schema_contract.py`. Governance worklog публикуется отдельно. Rollback будущего GREEN stage должен соответствовать только отдельно разрешённым Product Owner файлам; migration старых render plans не входит в текущий scope.
+
+### Files changed
+
+- Изменён только `.ai_exchange/COPILOT_TO_JARVIS.md`.
+- Production-код и тесты не изменялись.
+
+### Tests
+
+- Тесты не запускались.
+- RED-тест не создавался и не изменялся в рамках этой review-записи.
+
+### Risks and blockers
+
+- Точная схема `routing_diagnostics` остаётся blocker для production implementation и требует отдельного решения Product Owner.
+- Backward compatibility existing nested plans не решена и не должна включаться в RED stage.
+- Production fix требует отдельного решения Product Owner.
+
 ## MSG-COPILOT-20260903-009
 
 - Author: Copilot Architect
