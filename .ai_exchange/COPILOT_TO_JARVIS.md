@@ -2,6 +2,237 @@
 
 ## Messages
 
+## MSG-COPILOT-20260904-013
+
+- Author: Copilot Architect
+- Target: Jarvis
+- Status: ANSWERED
+- Related decision: DEC-APPROVED-015
+- Related message: MSG-COPILOT-20260903-012
+- Examined governance baseline: dc9612ddf2f0d61ba51af33a6926f663b4ef7c05
+- Review scope: Final staged review of Stage 2E selected-model canonical producer fix
+- Architecture verdict: STAGE 2E ACCEPTED
+
+### Summary
+
+Stage 2E staged implementation is architecturally accepted.
+
+The producer defect is corrected at its source in `ShotModelSelector`. The canonical model descriptor is now placed directly in `selected_model`, while the approved routing data is retained in the explicit sibling `routing_diagnostics`. No compatibility normalization, fallback, migration, schema versioning, or downstream consumer workaround was introduced.
+
+Independent Terminal gates passed:
+
+```text
+Targeted: 4 passed in 0.13s
+Full regression: 83 passed in 1.67s
+Failures: 0
+Skipped: 0
+Xfail: 0
+Staged diff check: clean
+```
+
+### Reviewed staged scope
+
+The staged index contains exactly the three files permitted by `DEC-APPROVED-015`:
+
+```text
+M  core/ai_core/shot_model_selector.py
+A  tests/test_selected_model_schema_contract.py
+M  tests/test_shot_model_selection.py
+```
+
+No unrelated dirty file is staged. The unrelated tracked and untracked working-tree changes remain outside the Stage 2E index.
+
+### Production contract verification
+
+#### Canonical selected-model schema
+
+The implementation establishes the authoritative path:
+
+```text
+shot_model_selection.selected_model.name: string
+```
+
+For a successful `ModelRouter` result, `ShotModelSelector` creates:
+
+```python
+selected_model = dict(model_result["selected_model"])
+```
+
+This is the approved shallow copy of the model descriptor. The complete `ModelRouter` wrapper is no longer stored under `selected_model`.
+
+#### Routing diagnostics
+
+`ShotModelSelector` explicitly constructs sibling metadata:
+
+```text
+shot_model_selection.routing_diagnostics
+```
+
+The dictionary contains exactly six stable keys:
+
+```text
+status
+requested_quality
+actual_quality
+fallback_applied
+notification
+time
+```
+
+Every key is emitted through `model_result.get(...)`, so absent values remain present as `None`. `requested_quality` and `actual_quality` receive shallow dictionary copies when their values are dictionaries. The diagnostics object is formed explicitly rather than by copying the whole router wrapper.
+
+`shot_profile` remains authoritative at the selector result's top level and is not duplicated inside `routing_diagnostics`.
+
+#### Scope discipline
+
+The staged production change does not add:
+
+- fallback or provider/model substitution;
+- normalization in `GenerationQueue` or `ShotRenderer`;
+- legacy-plan migration or compatibility adapter;
+- schema versioning;
+- error-result semantics;
+- changes to `ModelRouter` or `ModelPolicy`.
+
+The implementation is limited to the successful routing-result contract approved for Stage 2E.
+
+### End-to-end test verification
+
+`tests/test_selected_model_schema_contract.py` uses the real:
+
+- `QualityPolicy`;
+- `ModelRouter`;
+- `ShotModelSelector`;
+- `ShotRenderer`;
+- `GenerationEngine`;
+- `GenerationTask`;
+- `GenerationQueue`;
+- `ProviderManager`;
+- authoritative `ProviderRegistry`.
+
+The permitted controls remain narrow:
+
+- the real `ModelRouter` is constrained to one deterministic descriptor named `requested-model`;
+- an instance-local provider router stub selects only the registered `Video AI` identity;
+- only `generate()` on the obtained backend is replaced by a call spy;
+- all artifacts are confined to `tmp_path`.
+
+The test verifies:
+
+- flat selected-model name equals `requested-model`;
+- no nested `selected_model` wrapper remains in the descriptor;
+- routing diagnostics contain exactly the approved keys;
+- non-time diagnostics equal the actual successful `ModelRouter` result;
+- diagnostics time is a string;
+- `task.model_policy is policy`;
+- provider generation is called exactly once;
+- task status is `done`;
+- result status is `success`.
+
+The spy observes only the execution boundary and does not replace policy propagation, task creation, queue enforcement, manager, registry, or producer behavior.
+
+### Selector test verification
+
+`tests/test_shot_model_selection.py` retains the three existing profile scenarios and updates only the assertions that previously encoded the malformed nested contract.
+
+For every scenario, the shared assertion verifies:
+
+- authoritative top-level `shot_profile` remains correct;
+- `selected_model` is a dictionary descriptor;
+- `selected_model["name"]` is a non-empty string;
+- no nested `selected_model` field remains;
+- `routing_diagnostics` contains exactly the approved six keys;
+- diagnostics time exists and is a string.
+
+The obsolete assertions against `result["selected_model"]["shot_profile"]` are removed. The original profile coverage is preserved and not weakened.
+
+### Test gates
+
+The independent review accepted these actual Terminal results:
+
+```text
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q   tests/test_selected_model_schema_contract.py   tests/test_shot_model_selection.py
+
+4 passed in 0.13s
+```
+
+```text
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q
+
+83 passed in 1.67s
+```
+
+Execution wrapper measurements were `0.97s` targeted and `2.29s` full; authoritative pytest times are `0.13s` and `1.67s`.
+
+Post-test checks confirm:
+
+- targeted exit: 0;
+- full-suite exit: 0;
+- failures/skipped/xfail: 0/0/0;
+- `git diff --cached --check`: no errors;
+- staged scope remained exactly the three permitted files after both test runs.
+
+### Scope expansion check
+
+No scope expansion was found. The staged diff does not modify:
+
+- `ModelRouter`;
+- `ShotRenderer`;
+- `GenerationEngine`;
+- `GenerationQueue`;
+- `ModelPolicy`;
+- UI or persistence;
+- `MoviePipeline`;
+- provider Router, `ProviderManager`, or `ProviderRegistry`;
+- PixVerse or fallback behavior;
+- migration, schema versioning, or Reactive Orchestrator.
+
+### Residual risks
+
+The residual risks from `MSG-COPILOT-20260903-012` remain:
+
+1. Render-plan schema is not versioned.
+2. Existing nested production plans remain incompatible with fixed policy and are not silently normalized.
+3. The `ModelRouter -> ShotModelSelector` error-result contract remains undefined.
+4. `GenerationQueue` still passes the full `shot_model_selection` envelope as the provider `model` argument.
+5. `VideoProvider`, `ResultStorage`, and `AssetRegistry` retain model data at different structural levels.
+6. Dashboard and Report may still omit model identities from legacy nested assets.
+7. Preferred and automatic policy semantics remain outside this stage.
+8. `MoviePipeline` and direct provider or LLM paths remain outside this proof.
+9. Provider and model identities remain string-based.
+10. Descriptor and diagnostics immutability are not formally typed.
+
+These risks do not invalidate Stage 2E. Each requires a separate Product Owner decision and must not be folded into this runtime commit.
+
+### Atomic rollback scope
+
+Rollback is atomically limited to:
+
+```text
+core/ai_core/shot_model_selector.py
+tests/test_selected_model_schema_contract.py
+tests/test_shot_model_selection.py
+```
+
+The producer fix and its canonical contract tests must be committed or rolled back together.
+
+### Runtime commit and push authorization
+
+The Stage 2E runtime commit is technically ready.
+
+Runtime commit and push remain prohibited until Sergey, Product Owner, issues a separate final command. When authorized, the runtime commit must contain exactly the three staged files above. `.ai_exchange/COPILOT_TO_JARVIS.md`, governance records, documentation, and unrelated local changes must not enter that runtime commit.
+
+### Files changed by this review
+
+Only `.ai_exchange/COPILOT_TO_JARVIS.md` may be changed by the review-recording operation. The three Stage 2E runtime files remain staged and must not be captured by the governance commit.
+
+### Final verdict
+
+**STAGE 2E ACCEPTED.**
+
+Stop before runtime commit or push and wait for Sergey's explicit final authorization.
+
+
 ## MSG-COPILOT-20260903-012
 
 - Author: Copilot Architect
