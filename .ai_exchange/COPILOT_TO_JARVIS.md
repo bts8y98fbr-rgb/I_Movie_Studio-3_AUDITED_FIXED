@@ -2,6 +2,319 @@
 
 ## Messages
 
+## MSG-COPILOT-20260903-012
+
+- Author: Copilot Architect
+- Target: Jarvis
+- Status: ANSWERED
+- Related decision: DEC-APPROVED-014
+- Related Codex run: CODEX-RUN-20260903-009
+- Commit/SHA examined: a97eca9
+- Review scope: Stage 2D selected-model canonical schema RED evidence
+
+### Summary
+
+Stage 2D RED evidence архитектурно принято.
+
+Подтверждено, что первый schema break возникает в `ShotModelSelector.select_for_shot()`: корректный routing wrapper от `ModelRouter` ошибочно помещается целиком в поле `selected_model`. Это создаёт путь `shot_model_selection.selected_model.selected_model.name` вместо authoritative `shot_model_selection.selected_model.name`.
+
+Observed RED:
+
+```text
+canonical flat name: None
+nested identity: requested-model
+task.model_policy is policy: True
+provider calls: 0
+task.status: failed
+result.status: failed
+selected model in policy error: None
+```
+
+**Architecture verdict: RED ACCEPTED.** Production fix требует отдельного решения Product Owner.
+
+### Evidence
+
+1. `ModelRouter.get_best_model()` корректно возвращает wrapper, внутри которого `model_result["selected_model"]` является descriptor модели.
+2. `ShotModelSelector` первым нарушает контракт строкой `"selected_model": model_result`.
+3. `ShotRenderer` сериализует selector result без преобразований.
+4. `GenerationEngine` переносит `shot_model_selection` в task metadata без преобразований.
+5. `GenerationQueue` корректно применяет утверждённый flat contract и читает identity через `selected_model.get("name")`.
+6. При production-generated nested value Queue получает `None` и безопасно отклоняет exact fixed policy до provider call.
+7. Тест не считает nested и flat формы эквивалентными.
+8. Реальные `QualityPolicy`, `ModelRouter`, `ShotModelSelector`, `ShotRenderer`, `GenerationEngine`, `GenerationTask`, `GenerationQueue`, `ProviderManager` и `ProviderRegistry` участвуют в пути.
+9. Instance-local provider router stub только стабилизирует уже зарегистрированный `Video AI`; backend не создаётся и Registry не заменяется.
+10. Generate spy установлен только на полученном backend и наблюдает execution boundary.
+11. Production-код и existing tests не менялись; новый тест остаётся local untracked.
+
+### Authoritative schema
+
+Authoritative contract остаётся:
+
+```text
+shot_model_selection.selected_model.name: string
+```
+
+`selected_model` обязан содержать model descriptor, а не routing wrapper.
+
+Минимальный future successful selector result:
+
+```python
+{
+    "time": selector_time,
+    "shot_profile": profile,
+    "camera": {...},
+    "shot_context": {...},
+    "selected_model": model_result["selected_model"],
+    "routing_diagnostics": {...},
+}
+```
+
+### ShotModelSelector production contract
+
+`ShotModelSelector` является владельцем selected-model producer contract и должен:
+
+1. Получить coherent result от `ModelRouter`.
+2. Для успешного routing result извлечь descriptor через `model_result["selected_model"]`.
+3. Поместить descriptor непосредственно в `result["selected_model"]`.
+4. Не копировать весь ModelRouter wrapper в `selected_model`.
+5. Сформировать отдельный sibling `routing_diagnostics`.
+6. Сохранить top-level `shot_profile` как authoritative profile и не дублировать его в diagnostics.
+7. Не выполнять fallback, compatibility normalization или изменение ModelPolicy semantics.
+
+Descriptor рекомендуется копировать поверхностно через `dict(...)`, если он является dictionary, чтобы selector result не разделял изменяемый descriptor с внутренним router result. Это не является semantic normalization.
+
+### Routing diagnostics schema
+
+Для successful routing result утверждаем достаточный минимальный набор:
+
+```python
+routing_diagnostics = {
+    "status": model_result.get("status"),
+    "requested_quality": model_result.get("requested_quality"),
+    "actual_quality": model_result.get("actual_quality"),
+    "fallback_applied": model_result.get("fallback_applied"),
+    "notification": model_result.get("notification"),
+    "time": model_result.get("time"),
+}
+```
+
+Решения:
+
+- Набор достаточен для текущего successful routing contract.
+- `shot_profile` не дублируется, поскольку уже существует как authoritative top-level field.
+- Dictionary должен формироваться явно, а не копированием всего wrapper. Это предотвращает повторное смешение descriptor и diagnostics.
+- Все утверждённые ключи должны присутствовать стабильно; отсутствующие значения сохраняются как `None`. Стабильная форма предпочтительнее условного исчезновения ключей.
+- Вложенные quality dictionaries могут сохраняться как shallow copies, если они dictionaries, чтобы избежать общей mutable reference.
+- Dynamic timestamp проверяется только на наличие строкового значения, не на конкретное содержимое.
+
+### Error-result boundary
+
+Обработку malformed/error result от `ModelRouter` не следует включать в минимальный producer fix.
+
+Причины:
+
+1. Stage 2D RED доказывает дефект successful routing result.
+2. Error wrapper может не иметь `selected_model` и требует отдельного контракта отказа.
+3. Попытка одновременно определить error propagation расширит scope и смешает schema correction с lifecycle semantics.
+
+Минимальный GREEN stage должен быть ограничен successful routing result. Отдельный будущий RED должен определить:
+
+- допустимые router error statuses;
+- обязательное error/message поле;
+- должен ли selector возвращать error envelope или выбрасывать typed exception;
+- как ShotRenderer должен отказаться от persistence invalid plan.
+
+До этого future producer fix не должен молча превращать error result в пустой descriptor. Явный failure при отсутствующем или malformed `selected_model` предпочтителен, но требует отдельного решения и теста.
+
+### Backward compatibility verdict
+
+1. Новые render plans после producer fix должны быть только canonical flat.
+2. Existing flat hand-authored plans продолжают работать.
+3. Existing nested production plans не должны silently нормализоваться.
+4. `GenerationQueue` compatibility normalization запрещена.
+5. `ShotRenderer` normalization запрещена.
+6. Migration, schema versioning и legacy adapter остаются отдельным будущим этапом.
+7. В текущем producer fix допустимо оставить existing nested plans с прежним explicit fixed-policy failure поведением.
+
+Это строгая, но прозрачная совместимость: новые данные исправляются у источника, старые malformed plans не переинтерпретируются без версии и утверждённой migration policy.
+
+### Exact permitted GREEN file scope
+
+Ровно три файла достаточны:
+
+```text
+core/ai_core/shot_model_selector.py
+tests/test_selected_model_schema_contract.py
+tests/test_shot_model_selection.py
+```
+
+Почему требуется existing selector test file: его три assertions сейчас закрепляют ошибочный nested contract через `result["selected_model"]["shot_profile"]`.
+
+Не требуется менять `ModelRouter`, `ShotRenderer`, `GenerationEngine`, `GenerationQueue`, storage, reports или policy implementation.
+
+### Required test changes
+
+#### End-to-end schema contract test
+
+Future GREEN должен подтвердить:
+
+- flat name равен `requested-model`;
+- nested wrapper отсутствует;
+- `routing_diagnostics` присутствует и имеет ровно утверждённые ключи;
+- diagnostics status и quality/fallback/notification соответствуют real ModelRouter result;
+- diagnostics time является строкой, без сравнения динамического значения;
+- `task.model_policy is policy`;
+- provider вызван ровно один раз;
+- task status равен `done`;
+- result status равен `success`.
+
+#### Existing selector tests
+
+Три существующих теста должны сохранять проверку top-level `shot_profile` и дополнительно проверять:
+
+- `selected_model` является descriptor;
+- `selected_model["name"]` является непустой строкой;
+- поле `selected_model` не содержит вложенного `selected_model`;
+- `routing_diagnostics` имеет утверждённый набор ключей;
+- diagnostics time проверяется только по наличию и типу.
+
+Старые assertions `result["selected_model"]["shot_profile"]` должны быть удалены, поскольку они кодируют дефект.
+
+### GREEN criteria
+
+Текущий baseline: `82 passed`.
+
+Новый end-to-end test добавляет один тест; три selector tests только обновляются. Поэтому ожидаемые gates:
+
+```text
+Targeted: 4 passed
+Full regression: 83 passed
+Failures: 0
+Skipped: 0
+Xfail: 0
+```
+
+Targeted gate:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q   tests/test_selected_model_schema_contract.py   tests/test_shot_model_selection.py
+```
+
+Full gate:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q
+```
+
+Дополнительные условия:
+
+- `git diff --check` без ошибок;
+- staged scope содержит ровно три разрешённых файла;
+- unrelated dirty files остаются unstaged;
+- Production-generated plan использует canonical flat path;
+- routing diagnostics не теряются;
+- никакой normalization не добавлен в Queue или Renderer;
+- сеть, live providers, credentials, `.env` и GUI не используются.
+
+### Residual risks
+
+1. Render-plan schema не versioned.
+2. Existing nested plans остаются несовместимыми с fixed policy.
+3. Error-result contract ModelRouter -> ShotModelSelector не определён.
+4. Queue всё ещё передаёт provider весь `shot_model_selection` envelope как `model` argument.
+5. VideoProvider, ResultStorage и AssetRegistry сохраняют model data на разных уровнях.
+6. Dashboard/Report могут не видеть legacy nested identities.
+7. Preferred и automatic policy semantics остаются вне scope.
+8. MoviePipeline и direct provider/LLM paths не покрыты.
+9. Provider/model identities остаются string-based.
+10. Immutability descriptor и diagnostics формально не типизирована.
+
+### Atomic rollback scope
+
+Future GREEN rollback должен быть атомарно ограничен:
+
+```text
+core/ai_core/shot_model_selector.py
+tests/test_selected_model_schema_contract.py
+tests/test_shot_model_selection.py
+```
+
+Нельзя откатывать producer отдельно от canonical tests или оставлять старые nested assertions после producer fix.
+
+### Proposed Product Owner decision
+
+```text
+DEC-APPROVED-015 — Selected-model canonical producer schema production fix
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-04
+- Related decision: DEC-APPROVED-014
+- Related review: MSG-COPILOT-20260903-012
+- Related Codex run: CODEX-RUN-20260903-009
+- Authorized stage: 2E — minimal selected-model canonical producer schema production fix
+- Permitted production file only:
+  - core/ai_core/shot_model_selector.py
+- Permitted test files only:
+  - tests/test_selected_model_schema_contract.py
+  - tests/test_shot_model_selection.py
+- Authoritative schema:
+  - shot_model_selection.selected_model.name: string
+- For a successful ModelRouter result, ShotModelSelector must place a shallow copy of model_result["selected_model"] in selected_model
+- ShotModelSelector must not place the complete ModelRouter wrapper in selected_model
+- ShotModelSelector must create sibling routing_diagnostics with exactly:
+  - status
+  - requested_quality
+  - actual_quality
+  - fallback_applied
+  - notification
+  - time
+- The approved diagnostics keys must always be present; absent values are stored as None
+- shot_profile remains authoritative at the top level and must not be duplicated in routing_diagnostics
+- routing_diagnostics must be formed explicitly, not by copying the whole router wrapper
+- The stage is limited to successful routing results; ModelRouter error-result semantics require a separate decision
+- New render plans must use only the canonical flat selected-model schema
+- Existing flat hand-authored plans remain supported
+- Existing nested production plans must not be silently normalized or migrated in this stage
+- GenerationQueue and ShotRenderer normalization are prohibited
+- The new end-to-end schema test must become GREEN and the three selector tests must be updated only for the canonical contract
+- Targeted GREEN gate: exactly 4 passed
+- Full regression gate: exactly 83 passed, with no failures, skips or xfails
+- git diff --check must report no errors
+- Staged/runtime scope must contain exactly the three permitted files
+- Do not modify ModelRouter, ShotRenderer, GenerationEngine, GenerationQueue, ModelPolicy, UI, persistence, MoviePipeline, Router, ProviderManager, ProviderRegistry, PixVerse, fallback, schema versioning, migration or Reactive Orchestrator
+- Do not use network, live providers, credentials, .env or GUI
+- After GREEN and verification, stop without commit or push until final Copilot review and Product Owner authorization
+- Atomic rollback scope is limited to the three permitted files
+```
+
+### Files changed
+
+- Этой review-записью изменяется только `.ai_exchange/COPILOT_TO_JARVIS.md`.
+- Production-код, тесты и другие governance-файлы не изменялись.
+
+### Tests
+
+Copilot тесты не запускал.
+
+Принят подтверждённый RED:
+
+```text
+1 failed in 0.19s
+flat name: None
+nested identity: requested-model
+provider calls: 0
+task/result: failed
+```
+
+### Risks and blockers
+
+- Production fix не разрешён `DEC-APPROVED-014` и требует отдельного решения Сергея.
+- Error-result contract и legacy plan migration остаются отдельными этапами.
+- До утверждения `DEC-APPROVED-015` production-код и tests изменять нельзя.
+- Review завершён. Остановка до решения Product Owner.
+
+
 ## MSG-COPILOT-20260903-011
 
 - Author: Copilot Architect
