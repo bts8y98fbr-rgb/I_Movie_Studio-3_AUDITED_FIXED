@@ -6,6 +6,49 @@ Only decisions explicitly approved by Sergey are recorded as `APPROVED`.
 
 ## Approved standing decisions
 
+### DEC-APPROVED-015 — Selected-model canonical producer schema production fix
+
+- Status: APPROVED
+- Approved by: Sergey, Product Owner
+- Date: 2026-09-04
+- Related decision: DEC-APPROVED-014
+- Related review: MSG-COPILOT-20260903-012
+- Related Codex run: CODEX-RUN-20260903-009
+- Authorized stage: 2E — minimal selected-model canonical producer schema production fix
+- Permitted production file only:
+  - core/ai_core/shot_model_selector.py
+- Permitted test files only:
+  - tests/test_selected_model_schema_contract.py
+  - tests/test_shot_model_selection.py
+- Authoritative schema:
+  - shot_model_selection.selected_model.name: string
+- For a successful ModelRouter result, ShotModelSelector must place a shallow copy of model_result["selected_model"] in selected_model
+- ShotModelSelector must not place the complete ModelRouter wrapper in selected_model
+- ShotModelSelector must create sibling routing_diagnostics with exactly:
+  - status
+  - requested_quality
+  - actual_quality
+  - fallback_applied
+  - notification
+  - time
+- The approved diagnostics keys must always be present; absent values are stored as None
+- shot_profile remains authoritative at the top level and must not be duplicated in routing_diagnostics
+- routing_diagnostics must be formed explicitly, not by copying the whole router wrapper
+- The stage is limited to successful routing results; ModelRouter error-result semantics require a separate decision
+- New render plans must use only the canonical flat selected-model schema
+- Existing flat hand-authored plans remain supported
+- Existing nested production plans must not be silently normalized or migrated in this stage
+- GenerationQueue and ShotRenderer normalization are prohibited
+- The new end-to-end schema test must become GREEN and the three selector tests must be updated only for the canonical contract
+- Targeted GREEN gate: exactly 4 passed
+- Full regression gate: exactly 83 passed, with no failures, skips or xfails
+- git diff --check must report no errors
+- Staged/runtime scope must contain exactly the three permitted files
+- Do not modify ModelRouter, ShotRenderer, GenerationEngine, GenerationQueue, ModelPolicy, UI, persistence, MoviePipeline, Router, ProviderManager, ProviderRegistry, PixVerse, fallback, schema versioning, migration or Reactive Orchestrator
+- Do not use network, live providers, credentials, .env or GUI
+- After GREEN and verification, stop without runtime commit or push until final Copilot review and Product Owner authorization
+- Atomic rollback scope is limited to the three permitted files
+
 ### DEC-APPROVED-014 — Selected-model canonical schema RED test
 
 - Status: APPROVED
