@@ -5,6 +5,30 @@ from core.ai_core.quality_policy import QualityPolicy
 from core.ai_core.shot_model_selector import ShotModelSelector
 
 
+ROUTING_DIAGNOSTIC_KEYS = {
+    "status",
+    "requested_quality",
+    "actual_quality",
+    "fallback_applied",
+    "notification",
+    "time",
+}
+
+
+def assert_canonical_selection(result, expected_profile):
+    assert result["shot_profile"] == expected_profile
+
+    selected_model = result["selected_model"]
+    assert isinstance(selected_model, dict)
+    assert isinstance(selected_model["name"], str)
+    assert selected_model["name"]
+    assert "selected_model" not in selected_model
+
+    routing_diagnostics = result["routing_diagnostics"]
+    assert set(routing_diagnostics) == ROUTING_DIAGNOSTIC_KEYS
+    assert isinstance(routing_diagnostics["time"], str)
+
+
 def test_wide_shot_selects_environment_profile():
 
     router = ModelRouter(
@@ -24,12 +48,7 @@ def test_wide_shot_selects_environment_profile():
         }
     )
 
-    assert result["shot_profile"] == "environment"
-
-    assert (
-        result["selected_model"]["shot_profile"]
-        == "environment"
-    )
+    assert_canonical_selection(result, "environment")
 
 
 
@@ -52,12 +71,7 @@ def test_action_shot_selects_motion_profile():
         }
     )
 
-    assert result["shot_profile"] == "motion"
-
-    assert (
-        result["selected_model"]["shot_profile"]
-        == "motion"
-    )
+    assert_canonical_selection(result, "motion")
 
 
 
@@ -80,9 +94,4 @@ def test_close_detail_selects_detail_profile():
         }
     )
 
-    assert result["shot_profile"] == "detail"
-
-    assert (
-        result["selected_model"]["shot_profile"]
-        == "detail"
-    )
+    assert_canonical_selection(result, "detail")

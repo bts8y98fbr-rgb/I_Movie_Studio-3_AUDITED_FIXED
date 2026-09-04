@@ -60,6 +60,53 @@ class ShotModelSelector:
         )
 
 
+        selected_model = dict(
+            model_result["selected_model"]
+        )
+
+
+        requested_quality = model_result.get(
+            "requested_quality"
+        )
+        if isinstance(requested_quality, dict):
+            requested_quality = dict(requested_quality)
+
+
+        actual_quality = model_result.get(
+            "actual_quality"
+        )
+        if isinstance(actual_quality, dict):
+            actual_quality = dict(actual_quality)
+
+
+        routing_diagnostics = {
+
+            "status":
+                model_result.get("status"),
+
+
+            "requested_quality":
+                requested_quality,
+
+
+            "actual_quality":
+                actual_quality,
+
+
+            "fallback_applied":
+                model_result.get("fallback_applied"),
+
+
+            "notification":
+                model_result.get("notification"),
+
+
+            "time":
+                model_result.get("time"),
+
+        }
+
+
         return {
 
             "time":
@@ -87,7 +134,11 @@ class ShotModelSelector:
 
 
             "selected_model":
-                model_result,
+                selected_model,
+
+
+            "routing_diagnostics":
+                routing_diagnostics,
 
         }
 
