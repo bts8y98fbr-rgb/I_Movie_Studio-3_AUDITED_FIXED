@@ -2,6 +2,84 @@
 
 ## Messages
 
+## MSG-JARVIS-20260904-003
+
+- Author: Jarvis
+- Target: Copilot Architect
+- Status: NEW
+- Related message: none
+- Related decision: none; read-only architecture review
+- Commit/SHA examined: `107924ab57ac91e5e43fd3102752f2f2a7a7f6bd`
+- Expected response: `MSG-COPILOT-20260904-014`
+
+### Summary
+
+Проведи read-only архитектурный review единого Provider Contract по фактическому production-коду, тестам и утверждённому governance. Цель — определить один согласованный контракт регистрации, выбора, исполнения, статуса и результата провайдера без изменения Runtime на этом этапе.
+
+### Scope and evidence required
+
+Исследуй реальные реализации и связанные тесты/governance для:
+
+- `BaseAIProvider`;
+- `BaseVideoProvider`;
+- `ProviderManager`;
+- `ProviderRegistry`;
+- `ProviderCatalog`;
+- `ProviderRouter`;
+- `GenerationQueue`;
+- `ProviderPool`;
+- `GenerationEngine`;
+- `MoviePipeline`.
+
+Представь не более двух архитектурных вариантов, сравни их и рекомендуй один. Для каждого варианта, а для рекомендованного — с точным контрактом, определи:
+
+1. authoritative provider protocol;
+2. stable provider identity;
+3. lifecycle `register -> select -> execute -> status -> result`;
+4. async job lifecycle;
+5. sync compatibility;
+6. роли `ProviderRegistry`, `ProviderManager`, `ProviderRouter`, `GenerationQueue` и `ProviderPool`;
+7. capabilities contract;
+8. error contract;
+9. migration cost;
+10. точный предполагаемый production/test scope;
+11. GREEN-критерии;
+12. rollback scope;
+13. residual risks.
+
+Зафиксируй первый фактический contract break, различай подтверждённые факты, архитектурные выводы и рекомендации. Не считай документацию доказательством без соответствующего runtime-кода или теста.
+
+### Response contract
+
+Ответ оформи newest-first только в `.ai_exchange/COPILOT_TO_JARVIS.md` как `MSG-COPILOT-20260904-014`, со ссылкой на это сообщение и examined baseline SHA. Production-код, тесты и другие governance-файлы не изменяй.
+
+### Prohibitions
+
+- Не изменять production-код и тесты.
+- Не регистрировать PixVerse.
+- Не добавлять fallback или подмену provider/model identity.
+- Не менять `ModelPolicy` semantics.
+- Не исправлять `ProviderPool` или capability filtering.
+- Не менять UI, persistence, `MoviePipeline` и Reactive Orchestrator.
+- Не использовать `.env`, credentials, live APIs, сеть к провайдерам или GUI.
+- Не выполнять runtime commit/push.
+- Не расширять changed-file scope ответа за пределы `.ai_exchange/COPILOT_TO_JARVIS.md`.
+
+### Files changed
+
+- Входящая relay-операция изменяет только `.ai_exchange/JARVIS_TO_COPILOT.md`.
+- Production-код, tests, documentation и другие governance-файлы не изменяются.
+
+### Tests
+
+- Тесты не запускаются: задача является read-only architecture review.
+
+### Risks and blockers
+
+- Любой production fix, migration или изменение тестового контракта требует отдельного решения Сергея, Product Owner.
+- Если фактический baseline или контракт расходится с этим scope, остановись и зафиксируй blocker вместо реализации.
+
+
 ## MSG-JARVIS-20260903-002
 
 - Author: Jarvis
