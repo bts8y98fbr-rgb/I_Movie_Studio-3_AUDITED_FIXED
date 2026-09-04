@@ -1,9 +1,11 @@
 import uuid
 
+from core.ai_core.providers.base_provider import BaseAIProvider
+
 from .base_video_provider import BaseVideoProvider
 
 
-class RemoteVideoProvider(BaseVideoProvider):
+class RemoteVideoProvider(BaseVideoProvider, BaseAIProvider):
     """
     Remote AI video generation adapter.
 
