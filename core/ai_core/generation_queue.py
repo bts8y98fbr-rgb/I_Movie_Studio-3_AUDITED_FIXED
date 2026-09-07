@@ -3,6 +3,7 @@ from queue import Queue
 import uuid
 
 from core.ai_core.ai_audit_log import AIAuditLog
+from core.ai_core.generation_job_repository import GenerationJobRepository
 from core.ai_core.model_policy import ModelPolicy, SelectionMode
 from core.ai_core.result_storage import AIResultStorage
 from core.movie_engine.project_events import ProjectEvents
@@ -40,9 +41,11 @@ class GenerationTask:
 
 
 class GenerationQueue:
-    def __init__(self):
+    def __init__(self, job_repository=None):
         self.queue = Queue()
         self.tasks = []
+        self.job_repository = job_repository
+        self._job_repository_injected = job_repository is not None
 
     def add_task(self, task):
         self.queue.put(task)
@@ -60,6 +63,47 @@ class GenerationQueue:
             return None
 
         return ProjectEvents(task.project_path)
+
+    def _submitted_job_repository(self, task):
+        if self._job_repository_injected:
+            return self.job_repository
+
+        if not task.project_path:
+            return None
+
+        self.job_repository = GenerationJobRepository(
+            task.project_path
+        )
+
+        return self.job_repository
+
+    def _record_submission_observability(
+        self,
+        audit,
+        events,
+        task,
+        submission_data,
+    ):
+        if audit:
+            try:
+                audit.record(
+                    "generation_submitted",
+                    submission_data,
+                )
+            except Exception:
+                pass
+
+        if events:
+            try:
+                events.emit(
+                    "generation_submitted",
+                    {
+                        "task_id": task.task_id,
+                        **submission_data,
+                    },
+                )
+            except Exception:
+                pass
 
     def process_next(self):
         if self.queue.empty():
@@ -148,6 +192,16 @@ class GenerationQueue:
             ):
                 task.status = "submitted"
 
+                job_repository = self._submitted_job_repository(
+                    task
+                )
+
+                if job_repository:
+                    job_repository.persist(
+                        task,
+                        task.result,
+                    )
+
                 submission_data = {
                     "scene_id": task.metadata.get("scene_id"),
                     "shot_id": task.metadata.get("shot_id"),
@@ -155,20 +209,12 @@ class GenerationQueue:
                     "provider": task.provider.name,
                 }
 
-                if audit:
-                    audit.record(
-                        "generation_submitted",
-                        submission_data,
-                    )
-
-                if events:
-                    events.emit(
-                        "generation_submitted",
-                        {
-                            "task_id": task.task_id,
-                            **submission_data,
-                        },
-                    )
+                self._record_submission_observability(
+                    audit,
+                    events,
+                    task,
+                    submission_data,
+                )
 
                 return task
 
