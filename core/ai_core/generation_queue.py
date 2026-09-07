@@ -142,6 +142,36 @@ class GenerationQueue:
                 metadata=task.metadata,
             )
 
+            if (
+                isinstance(task.result, dict)
+                and task.result.get("status") == "submitted"
+            ):
+                task.status = "submitted"
+
+                submission_data = {
+                    "scene_id": task.metadata.get("scene_id"),
+                    "shot_id": task.metadata.get("shot_id"),
+                    "job_id": task.result.get("job_id"),
+                    "provider": task.provider.name,
+                }
+
+                if audit:
+                    audit.record(
+                        "generation_submitted",
+                        submission_data,
+                    )
+
+                if events:
+                    events.emit(
+                        "generation_submitted",
+                        {
+                            "task_id": task.task_id,
+                            **submission_data,
+                        },
+                    )
+
+                return task
+
             if not isinstance(task.result, dict):
                 task.result = {
                     "result": task.result,
