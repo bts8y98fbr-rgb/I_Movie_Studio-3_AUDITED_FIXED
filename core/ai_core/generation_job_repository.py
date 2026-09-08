@@ -25,6 +25,10 @@ class GenerationJobRetrievedError(GenerationJobRepositoryError):
     """Raised when a retrieved provider-result record is invalid or corrupt."""
 
 
+class GenerationJobFinalizedError(GenerationJobRepositoryError):
+    """Raised when a finalized local-asset record is invalid or corrupt."""
+
+
 class GenerationJobRepository:
     FORMAT_VERSION = 1
     RECEIPT_KEYS = {
@@ -72,6 +76,20 @@ class GenerationJobRepository:
         "provider_result",
         "retrieved_at",
     }
+    FINALIZED_KEYS = {
+        "format_version",
+        "task_id",
+        "task_type",
+        "job_id",
+        "provider",
+        "metadata",
+        "result_state",
+        "asset_ready",
+        "asset_id",
+        "asset_file",
+        "registry_version",
+        "finalized_at",
+    }
 
     def __init__(self, project_path):
         self.project_path = Path(project_path)
@@ -89,6 +107,11 @@ class GenerationJobRepository:
             self.project_path
             / "generation_jobs"
             / "retrieved"
+        )
+        self.finalized_dir = (
+            self.project_path
+            / "generation_jobs"
+            / "finalized"
         )
 
     def receipt_path(self, task_id):
@@ -248,6 +271,55 @@ class GenerationJobRepository:
         self._validate_retrieved(record)
         self._atomic_write(
             self.retrieved_path(record["task_id"]),
+            record,
+        )
+
+        return record
+
+    def finalized_path(self, task_id):
+        task_id = str(task_id)
+
+        if not task_id or Path(task_id).name != task_id:
+            raise GenerationJobFinalizedError(
+                f"Invalid finalized generation task identity: {task_id!r}"
+            )
+
+        return self.finalized_dir / f"{task_id}.json"
+
+    def finalized_exists(self, task_id):
+        return self.finalized_path(task_id).is_file()
+
+    def load_finalized(self, task_id):
+        task_id = str(task_id)
+        path = self.finalized_path(task_id)
+
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise GenerationJobRepositoryError(
+                f"Cannot read finalized generation job record: {path}"
+            ) from exc
+
+        try:
+            record = json.loads(raw)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise GenerationJobFinalizedError(
+                f"Corrupt finalized generation job record: {path}"
+            ) from exc
+
+        self._validate_finalized(record)
+
+        if record["task_id"] != task_id:
+            raise GenerationJobFinalizedError(
+                "Finalized generation job record task identity mismatch"
+            )
+
+        return record
+
+    def persist_finalized(self, record):
+        self._validate_finalized(record)
+        self._atomic_write(
+            self.finalized_path(record["task_id"]),
             record,
         )
 
@@ -421,6 +493,70 @@ class GenerationJobRepository:
             raise GenerationJobRetrievedError(
                 "Retrieved provider_result must be JSON serializable"
             ) from exc
+
+    def _validate_finalized(self, record):
+        if not isinstance(record, dict):
+            raise GenerationJobFinalizedError(
+                "Finalized generation job record must be a dictionary"
+            )
+
+        if set(record) != self.FINALIZED_KEYS:
+            raise GenerationJobFinalizedError(
+                "Finalized generation job record fields do not match "
+                "format version 1"
+            )
+
+        if record.get("format_version") != self.FORMAT_VERSION:
+            raise GenerationJobFinalizedError(
+                "Unsupported finalized generation job record format version"
+            )
+
+        for field in (
+            "task_id",
+            "task_type",
+            "job_id",
+            "provider",
+            "asset_id",
+            "asset_file",
+            "finalized_at",
+        ):
+            value = record.get(field)
+            if not isinstance(value, str) or not value:
+                raise GenerationJobFinalizedError(
+                    "Finalized generation job record field "
+                    f"{field!r} must be a non-empty string"
+                )
+
+        metadata = record.get("metadata")
+        if (
+            not isinstance(metadata, dict)
+            or set(metadata) != self.METADATA_KEYS
+        ):
+            raise GenerationJobFinalizedError(
+                "Finalized generation job record metadata must contain only "
+                "scene_id and shot_id"
+            )
+
+        if record.get("result_state") != "finalized":
+            raise GenerationJobFinalizedError(
+                "Finalized generation job result_state must be 'finalized'"
+            )
+
+        if record.get("asset_ready") is not True:
+            raise GenerationJobFinalizedError(
+                "Finalized generation job must expose asset_ready=true"
+            )
+
+        registry_version = record.get("registry_version")
+        if (
+            isinstance(registry_version, bool)
+            or not isinstance(registry_version, int)
+            or registry_version < 1
+        ):
+            raise GenerationJobFinalizedError(
+                "Finalized generation job registry_version "
+                "must be a positive integer"
+            )
 
     def _atomic_write(self, target, receipt):
         target.parent.mkdir(parents=True, exist_ok=True)
