@@ -6,6 +6,9 @@ from core.ai_core.generation_queue import GenerationQueue, GenerationTask
 from core.ai_core.provider_manager import ProviderManager
 from core.ai_core.providers import ProviderCatalog, ProviderRouter, CredentialManager
 from core.ai_core.quality_policy import QualityPolicy
+from core.movie_engine.generation_status import (
+    aggregate_generation_tasks,
+)
 
 
 class GenerationEngine:
@@ -117,52 +120,10 @@ class GenerationEngine:
 
         results = self.queue.process_all()
 
-        task_statuses = [
-            task.status
-            for task in results
-        ]
-
-        generated = sum(
-            1
-            for status in task_statuses
-            if status == "done"
+        task_snapshots = self.queue.get_status()
+        aggregation = aggregate_generation_tasks(
+            task_snapshots
         )
-        failed = sum(
-            1
-            for status in task_statuses
-            if status == "failed"
-        )
-        cancelled = sum(
-            1
-            for status in task_statuses
-            if status == "cancelled"
-        )
-        submitted = sum(
-            1
-            for status in task_statuses
-            if status == "submitted"
-        )
-        running = sum(
-            1
-            for status in task_statuses
-            if status == "running"
-        )
-        pending = sum(
-            1
-            for status in task_statuses
-            if status not in (
-                "done",
-                "failed",
-                "cancelled",
-            )
-        )
-
-        if not results or pending > 0:
-            scene_status = "pending"
-        elif failed > 0 or cancelled > 0:
-            scene_status = "completed_with_errors"
-        else:
-            scene_status = "completed"
 
         actual_qualities = [
             task.metadata.get("actual_quality")
@@ -176,14 +137,14 @@ class GenerationEngine:
             "quality": self.quality,
             "requested_quality": self.quality_policy.get_video_defaults(),
             "actual_quality": actual_qualities[0] if actual_qualities else None,
-            "generated": generated,
-            "failed": failed,
-            "cancelled": cancelled,
-            "submitted": submitted,
-            "running": running,
-            "pending": pending,
-            "status": scene_status,
-            "tasks": self.queue.get_status(),
+            "generated": aggregation["generated"],
+            "failed": aggregation["failed"],
+            "cancelled": aggregation["cancelled"],
+            "submitted": aggregation["submitted"],
+            "running": aggregation["running"],
+            "pending": aggregation["pending"],
+            "status": aggregation["status"],
+            "tasks": task_snapshots,
         }
 
         output_path = (
