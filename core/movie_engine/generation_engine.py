@@ -116,7 +116,53 @@ class GenerationEngine:
             self.queue.add_task(task)
 
         results = self.queue.process_all()
-        failed = sum(1 for task in results if task.status == "failed")
+
+        task_statuses = [
+            task.status
+            for task in results
+        ]
+
+        generated = sum(
+            1
+            for status in task_statuses
+            if status == "done"
+        )
+        failed = sum(
+            1
+            for status in task_statuses
+            if status == "failed"
+        )
+        cancelled = sum(
+            1
+            for status in task_statuses
+            if status == "cancelled"
+        )
+        submitted = sum(
+            1
+            for status in task_statuses
+            if status == "submitted"
+        )
+        running = sum(
+            1
+            for status in task_statuses
+            if status == "running"
+        )
+        pending = sum(
+            1
+            for status in task_statuses
+            if status not in (
+                "done",
+                "failed",
+                "cancelled",
+            )
+        )
+
+        if not results or pending > 0:
+            scene_status = "pending"
+        elif failed > 0 or cancelled > 0:
+            scene_status = "completed_with_errors"
+        else:
+            scene_status = "completed"
 
         actual_qualities = [
             task.metadata.get("actual_quality")
@@ -130,15 +176,13 @@ class GenerationEngine:
             "quality": self.quality,
             "requested_quality": self.quality_policy.get_video_defaults(),
             "actual_quality": actual_qualities[0] if actual_qualities else None,
-            "generated": sum(
-                1 for task in results if task.status == "done"
-            ),
+            "generated": generated,
             "failed": failed,
-            "status": (
-                "completed"
-                if failed == 0
-                else "completed_with_errors"
-            ),
+            "cancelled": cancelled,
+            "submitted": submitted,
+            "running": running,
+            "pending": pending,
+            "status": scene_status,
             "tasks": self.queue.get_status(),
         }
 
