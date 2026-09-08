@@ -17,6 +17,10 @@ class GenerationJobPersistenceError(GenerationJobRepositoryError):
     """Raised when a submitted-generation receipt cannot be written safely."""
 
 
+class GenerationJobTerminalError(GenerationJobRepositoryError):
+    """Raised when a terminal provider-job record is invalid or corrupt."""
+
+
 class GenerationJobRepository:
     FORMAT_VERSION = 1
     RECEIPT_KEYS = {
@@ -33,6 +37,25 @@ class GenerationJobRepository:
         "scene_id",
         "shot_id",
     }
+    TERMINAL_STATUSES = {
+        "succeeded",
+        "failed",
+        "cancelled",
+    }
+    TERMINAL_KEYS = {
+        "format_version",
+        "task_id",
+        "task_type",
+        "job_id",
+        "provider",
+        "status",
+        "metadata",
+        "terminal_at",
+    }
+    SUCCEEDED_TERMINAL_KEYS = TERMINAL_KEYS | {
+        "result_state",
+        "asset_ready",
+    }
 
     def __init__(self, project_path):
         self.project_path = Path(project_path)
@@ -40,6 +63,11 @@ class GenerationJobRepository:
             self.project_path
             / "generation_jobs"
             / "submitted"
+        )
+        self.terminal_dir = (
+            self.project_path
+            / "generation_jobs"
+            / "terminal"
         )
 
     def receipt_path(self, task_id):
@@ -106,6 +134,55 @@ class GenerationJobRepository:
 
         return receipt
 
+    def terminal_path(self, task_id):
+        task_id = str(task_id)
+
+        if not task_id or Path(task_id).name != task_id:
+            raise GenerationJobTerminalError(
+                f"Invalid terminal generation task identity: {task_id!r}"
+            )
+
+        return self.terminal_dir / f"{task_id}.json"
+
+    def terminal_exists(self, task_id):
+        return self.terminal_path(task_id).is_file()
+
+    def load_terminal(self, task_id):
+        task_id = str(task_id)
+        path = self.terminal_path(task_id)
+
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise GenerationJobRepositoryError(
+                f"Cannot read terminal generation job record: {path}"
+            ) from exc
+
+        try:
+            record = json.loads(raw)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise GenerationJobTerminalError(
+                f"Corrupt terminal generation job record: {path}"
+            ) from exc
+
+        self._validate_terminal(record)
+
+        if record["task_id"] != task_id:
+            raise GenerationJobTerminalError(
+                "Terminal generation job record task identity mismatch"
+            )
+
+        return record
+
+    def persist_terminal(self, record):
+        self._validate_terminal(record)
+        self._atomic_write(
+            self.terminal_path(record["task_id"]),
+            record,
+        )
+
+        return record
+
     def _validate(self, receipt):
         if not isinstance(receipt, dict):
             raise GenerationJobReceiptError(
@@ -147,6 +224,64 @@ class GenerationJobRepository:
         ):
             raise GenerationJobReceiptError(
                 "Generation job receipt metadata must contain only scene_id and shot_id"
+            )
+
+    def _validate_terminal(self, record):
+        if not isinstance(record, dict):
+            raise GenerationJobTerminalError(
+                "Terminal generation job record must be a dictionary"
+            )
+
+        expected_keys = self.TERMINAL_KEYS
+        if record.get("status") == "succeeded":
+            expected_keys = self.SUCCEEDED_TERMINAL_KEYS
+
+        if set(record) != expected_keys:
+            raise GenerationJobTerminalError(
+                "Terminal generation job record fields do not match format version 1"
+            )
+
+        if record.get("format_version") != self.FORMAT_VERSION:
+            raise GenerationJobTerminalError(
+                "Unsupported terminal generation job record format version"
+            )
+
+        if record.get("status") not in self.TERMINAL_STATUSES:
+            raise GenerationJobTerminalError(
+                "Terminal generation job record status is not recognized"
+            )
+
+        for field in (
+            "task_id",
+            "task_type",
+            "job_id",
+            "provider",
+            "terminal_at",
+        ):
+            value = record.get(field)
+            if not isinstance(value, str) or not value:
+                raise GenerationJobTerminalError(
+                    "Terminal generation job record field "
+                    f"{field!r} must be a non-empty string"
+                )
+
+        metadata = record.get("metadata")
+        if (
+            not isinstance(metadata, dict)
+            or set(metadata) != self.METADATA_KEYS
+        ):
+            raise GenerationJobTerminalError(
+                "Terminal generation job record metadata must contain only "
+                "scene_id and shot_id"
+            )
+
+        if record["status"] == "succeeded" and (
+            record.get("result_state") != "pending_retrieval"
+            or record.get("asset_ready") is not False
+        ):
+            raise GenerationJobTerminalError(
+                "Succeeded generation job must remain pending retrieval "
+                "without a ready asset"
             )
 
     def _atomic_write(self, target, receipt):
