@@ -6,6 +6,9 @@ from core.ai_core.generation_queue import GenerationQueue, GenerationTask
 from core.ai_core.provider_manager import ProviderManager
 from core.ai_core.providers import ProviderCatalog, ProviderRouter, CredentialManager
 from core.ai_core.quality_policy import QualityPolicy
+from core.movie_engine.generation_scene_lifecycle import (
+    GenerationSceneLifecycle,
+)
 from core.movie_engine.generation_status import (
     aggregate_generation_tasks,
 )
@@ -35,6 +38,13 @@ class GenerationEngine:
         self.credentials = CredentialManager()
         self.quality_policy = QualityPolicy(quality)
         self.queue = GenerationQueue()
+
+    def advance_scene_once(self, scene_id):
+        lifecycle = GenerationSceneLifecycle(
+            project_path=self.project_path,
+            provider_resolver=self.provider_manager,
+        )
+        return lifecycle.advance_once(scene_id)
 
     def generate_scene(self, scene_id):
         render_plan_path = (
