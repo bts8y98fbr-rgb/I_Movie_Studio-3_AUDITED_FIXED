@@ -64,14 +64,7 @@ class GenerationSceneLifecycle:
         self.events = events
 
     def advance_once(self, scene_id):
-        self._validate_scene_id(scene_id)
-        document = self._load_scene_document(scene_id)
-        active_tasks = self._validate_scene_document(document, scene_id)
-
-        dispatch_plan = tuple(
-            self._preflight_active_task(task, scene_id)
-            for task in active_tasks
-        )
+        dispatch_plan = self._preflight_scene(scene_id)
 
         if not dispatch_plan:
             return {
@@ -102,6 +95,31 @@ class GenerationSceneLifecycle:
             "advanced": advanced,
             "advanced_count": len(advanced),
         }
+
+    def inspect(self, scene_id):
+        dispatch_plan = self._preflight_scene(scene_id)
+        plan = [
+            {
+                "task_id": task_id,
+                "action": action,
+            }
+            for task_id, action in dispatch_plan
+        ]
+        return {
+            "scene_id": scene_id,
+            "active_count": len(plan),
+            "needs_advance": bool(plan),
+            "plan": plan,
+        }
+
+    def _preflight_scene(self, scene_id):
+        self._validate_scene_id(scene_id)
+        document = self._load_scene_document(scene_id)
+        active_tasks = self._validate_scene_document(document, scene_id)
+        return tuple(
+            self._preflight_active_task(task, scene_id)
+            for task in active_tasks
+        )
 
     def _validate_scene_id(self, scene_id):
         if (
