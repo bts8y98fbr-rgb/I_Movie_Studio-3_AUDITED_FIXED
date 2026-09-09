@@ -46,6 +46,13 @@ class GenerationEngine:
         )
         return lifecycle.advance_once(scene_id)
 
+    def inspect_scene_lifecycle(self, scene_id):
+        lifecycle = GenerationSceneLifecycle(
+            project_path=self.project_path,
+            provider_resolver=self.provider_manager,
+        )
+        return lifecycle.inspect(scene_id)
+
     def generate_scene(self, scene_id):
         render_plan_path = (
             self.project_path / "render"
