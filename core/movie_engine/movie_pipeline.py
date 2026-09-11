@@ -125,6 +125,15 @@ class MoviePipeline:
         engine = self._new_generation_lifecycle_engine()
         return engine.advance_scene_once(scene_id)
 
+    def submit_scene_generation(self, scene_id):
+        engine = GenerationEngine(
+            project_path=self.project_path,
+        )
+        return engine.submit_scene_generation(
+            scene_id,
+            provider=self.video_provider,
+        )
+
 
     def create_scene(
         self,
