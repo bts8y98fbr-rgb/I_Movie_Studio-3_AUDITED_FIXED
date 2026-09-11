@@ -172,6 +172,24 @@ class MoviePipeline:
             scene_id
         )
 
+    def create_prepare_submit_scene_generation(
+        self,
+        scene_id,
+        scene_data,
+        duration=5,
+    ):
+        self.create_scene_direction(
+            scene_id,
+            scene_data,
+            duration,
+        )
+        self.prepare_scene_generation(
+            scene_id
+        )
+        return self.submit_scene_generation(
+            scene_id
+        )
+
 
     def create_scene(
         self,
