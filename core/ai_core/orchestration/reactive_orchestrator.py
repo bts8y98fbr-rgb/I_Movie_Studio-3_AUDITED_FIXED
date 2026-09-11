@@ -55,7 +55,7 @@ class ReactiveOrchestrator:
         self.state = ReactiveGenerationState(
             revision=revision.revision,
             status="replanning",
-            affected_scene_ids=sorted({int(x) for x in affected_scene_ids}),
+            affected_scene_ids=list(dict.fromkeys(affected_scene_ids)),
         )
 
         try:
