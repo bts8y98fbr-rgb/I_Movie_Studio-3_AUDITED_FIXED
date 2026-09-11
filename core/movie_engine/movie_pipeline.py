@@ -121,6 +121,24 @@ class MoviePipeline:
             "duration": duration,
         }
 
+    def _resolve_scene_input(
+        self,
+        scene_id,
+    ):
+        registered = self._scene_inputs.get(
+            scene_id
+        )
+
+        if registered is None:
+            return None
+
+        return {
+            "scene_data": dict(
+                registered["scene_data"]
+            ),
+            "duration": registered["duration"],
+        }
+
     def _new_generation_lifecycle_engine(self):
         engine = GenerationEngine(
             project_path=self.project_path,
