@@ -220,6 +220,24 @@ class MoviePipeline:
         )
 
 
+    def create_scene_generation(
+        self,
+        scene_id,
+        scene_data,
+        duration=5,
+    ):
+        self._register_scene_input(
+            scene_id,
+            scene_data,
+            duration,
+        )
+        return self.create_prepare_submit_scene_generation(
+            scene_id,
+            scene_data,
+            duration,
+        )
+
+
     def create_scene(
         self,
         scene_id,
