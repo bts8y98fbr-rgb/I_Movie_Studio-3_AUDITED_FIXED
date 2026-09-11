@@ -19,7 +19,18 @@ from core.ai_core.providers.video.video_provider import (
     VideoProvider,
 )
 
+from core.movie_engine.generation_engine import GenerationEngine
 from core.movie_engine.scene_builder import SceneBuilder
+
+
+class _ExactVideoProviderResolver:
+    def __init__(self, provider):
+        self.provider = provider
+
+    def get(self, name):
+        if getattr(self.provider, "name", None) == name:
+            return self.provider
+        return None
 
 
 class MoviePipeline:
@@ -96,6 +107,23 @@ class MoviePipeline:
                 submit_scene=self._regenerate_scene_from_master_prompt
             )
         )
+
+    def _new_generation_lifecycle_engine(self):
+        engine = GenerationEngine(
+            project_path=self.project_path,
+        )
+        engine.provider_manager = _ExactVideoProviderResolver(
+            self.video_provider
+        )
+        return engine
+
+    def inspect_scene_lifecycle(self, scene_id):
+        engine = self._new_generation_lifecycle_engine()
+        return engine.inspect_scene_lifecycle(scene_id)
+
+    def advance_scene_once(self, scene_id):
+        engine = self._new_generation_lifecycle_engine()
+        return engine.advance_scene_once(scene_id)
 
 
     def create_scene(
