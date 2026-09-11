@@ -110,6 +110,17 @@ class MoviePipeline:
             )
         )
 
+    def _register_scene_input(
+        self,
+        scene_id,
+        scene_data,
+        duration,
+    ):
+        self._scene_inputs[scene_id] = {
+            "scene_data": dict(scene_data),
+            "duration": duration,
+        }
+
     def _new_generation_lifecycle_engine(self):
         engine = GenerationEngine(
             project_path=self.project_path,
