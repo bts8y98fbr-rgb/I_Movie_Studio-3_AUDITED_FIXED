@@ -20,6 +20,8 @@ from core.ai_core.providers.video.video_provider import (
 )
 
 from core.movie_engine.generation_engine import GenerationEngine
+from core.movie_engine.storyboard_engine import StoryboardEngine
+from core.movie_engine.shot_renderer import ShotRenderer
 from core.movie_engine.scene_builder import SceneBuilder
 
 
@@ -132,6 +134,21 @@ class MoviePipeline:
         return engine.submit_scene_generation(
             scene_id,
             provider=self.video_provider,
+        )
+
+    def prepare_scene_generation(self, scene_id):
+        storyboard_engine = StoryboardEngine(
+            project_path=self.project_path,
+        )
+        storyboard_engine.create_storyboard_from_director(
+            scene_id
+        )
+
+        shot_renderer = ShotRenderer(
+            project_path=self.project_path,
+        )
+        return shot_renderer.create_render_plan(
+            scene_id
         )
 
 
