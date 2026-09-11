@@ -152,6 +152,27 @@ class MoviePipeline:
         )
 
 
+    def create_scene_direction(
+        self,
+        scene_id,
+        scene_data,
+        duration,
+    ):
+        return self.ai_director.analyze_scene(
+            scene_id,
+            scene_data,
+            duration,
+        )
+
+    def load_scene_direction(
+        self,
+        scene_id,
+    ):
+        return self.ai_director.load_direction(
+            scene_id
+        )
+
+
     def create_scene(
         self,
         scene_id,
