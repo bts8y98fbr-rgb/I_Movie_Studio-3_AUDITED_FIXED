@@ -355,26 +355,26 @@ class MoviePipeline:
         scene_id,
         prompt,
     ):
-        original = self._scene_inputs.get(int(scene_id))
-        if original is None:
+        resolved = self._resolve_scene_input(
+            scene_id
+        )
+        if resolved is None:
             return {
                 "status": "skipped",
                 "scene_id": scene_id,
                 "reason": "Scene is not registered in this pipeline",
             }
 
-        scene_data = dict(original["scene_data"])
+        scene_data = dict(
+            resolved["scene_data"]
+        )
         scene_data["master_prompt"] = prompt
-        result = self.create_scene(
+
+        return self.create_prepare_submit_scene_generation(
             scene_id,
             scene_data,
-            original["duration"],
+            resolved["duration"],
         )
-        return {
-            "status": "submitted",
-            "scene_id": scene_id,
-            "generated_tasks": len(result.get("generated_tasks", [])),
-        }
 
 
     def _queue_shots(
